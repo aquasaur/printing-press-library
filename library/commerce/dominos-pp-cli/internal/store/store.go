@@ -179,6 +179,7 @@ func (s *Store) migrate() error {
 			zip TEXT,
 			is_default BOOLEAN
 		)`,
+		`ALTER TABLE carts ADD COLUMN coupons_json TEXT`,
 		`CREATE TABLE IF NOT EXISTS orders (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
@@ -198,7 +199,10 @@ func (s *Store) migrate() error {
 
 	for _, m := range migrations {
 		if _, err := s.db.Exec(m); err != nil {
-			return fmt.Errorf("migration failed: %w", err)
+			// ALTER TABLE ADD COLUMN fails if the column already exists; that is safe to ignore.
+			if !strings.Contains(err.Error(), "duplicate column") {
+				return fmt.Errorf("migration failed: %w", err)
+			}
 		}
 	}
 	return nil
@@ -618,12 +622,16 @@ func (s *Store) SearchMenuItems(query string, limit int) ([]json.RawMessage, err
 	})
 }
 
-func (s *Store) UpsertCart(id, name, storeID, serviceMethod, addressJSON, itemsJSON string) error {
+func (s *Store) UpsertCart(id, name, storeID, serviceMethod, addressJSON, itemsJSON string, extras ...string) error {
+	couponsJSON := ""
+	if len(extras) > 0 {
+		couponsJSON = extras[0]
+	}
 	_, err := s.db.Exec(
 		`INSERT OR REPLACE INTO carts
-		(id, name, store_id, service_method, address_json, items_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM carts WHERE id = ?), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)`,
-		id, name, storeID, serviceMethod, addressJSON, itemsJSON, id,
+		(id, name, store_id, service_method, address_json, items_json, coupons_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM carts WHERE id = ?), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)`,
+		id, name, storeID, serviceMethod, addressJSON, itemsJSON, couponsJSON, id,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert cart: %w", err)
@@ -634,24 +642,24 @@ func (s *Store) UpsertCart(id, name, storeID, serviceMethod, addressJSON, itemsJ
 func (s *Store) GetCart(id string) (json.RawMessage, error) {
 	return singleRowJSON(
 		s.db.QueryRow(
-			`SELECT id, name, store_id, service_method, address_json, items_json, created_at, updated_at
+			`SELECT id, name, store_id, service_method, address_json, items_json, coupons_json, created_at, updated_at
 			 FROM carts WHERE id = ?`,
 			id,
 		),
-		[]string{"id", "name", "store_id", "service_method", "address_json", "items_json", "created_at", "updated_at"},
+		[]string{"id", "name", "store_id", "service_method", "address_json", "items_json", "coupons_json", "created_at", "updated_at"},
 	)
 }
 
 func (s *Store) ListCarts() ([]json.RawMessage, error) {
 	rows, err := s.db.Query(
-		`SELECT id, name, store_id, service_method, address_json, items_json, created_at, updated_at
+		`SELECT id, name, store_id, service_method, address_json, items_json, coupons_json, created_at, updated_at
 		 FROM carts ORDER BY updated_at DESC, name ASC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list carts: %w", err)
 	}
 
-	return rowsToJSON(rows, []string{"id", "name", "store_id", "service_method", "address_json", "items_json", "created_at", "updated_at"})
+	return rowsToJSON(rows, []string{"id", "name", "store_id", "service_method", "address_json", "items_json", "coupons_json", "created_at", "updated_at"})
 }
 
 func (s *Store) DeleteCart(id string) error {

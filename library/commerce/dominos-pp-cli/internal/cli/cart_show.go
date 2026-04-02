@@ -29,6 +29,10 @@ func newCartShowCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			coupons, err := loadCartCoupons(cart)
+			if err != nil {
+				return err
+			}
 			total := 0.0
 			for _, item := range items {
 				total += item.EstimatedPrice
@@ -40,6 +44,7 @@ func newCartShowCmd(flags *rootFlags) *cobra.Command {
 				"service_method":  cart.ServiceMethod,
 				"address_json":    json.RawMessage(cart.AddressJSON),
 				"items":           items,
+				"coupons":         coupons,
 				"estimated_total": total,
 				"updated_at":      cart.UpdatedAt,
 			}
@@ -47,7 +52,7 @@ func newCartShowCmd(flags *rootFlags) *cobra.Command {
 				return flags.printJSON(cmd, out)
 			}
 			if flags.compact {
-				return flags.printTable(cmd, []string{"ID", "STORE", "ITEMS", "EST_TOTAL"}, [][]string{{cart.ID, cart.StoreID, fmt.Sprintf("%d", len(items)), money(total)}})
+				return flags.printTable(cmd, []string{"ID", "STORE", "ITEMS", "COUPONS", "EST_TOTAL"}, [][]string{{cart.ID, cart.StoreID, fmt.Sprintf("%d", len(items)), fmt.Sprintf("%d", len(coupons)), money(total)}})
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Cart %s\nStore: %s  Service: %s\n", cart.ID, cart.StoreID, cart.ServiceMethod)
 			if cart.Name != "" {
@@ -62,9 +67,20 @@ func newCartShowCmd(flags *rootFlags) *cobra.Command {
 			}
 			if len(rows) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "Cart is empty.")
-				return nil
+			} else {
+				if err := flags.printTable(cmd, []string{"#", "CODE", "QTY", "SIZE", "TOPPINGS", "EST_PRICE"}, rows); err != nil {
+					return err
+				}
 			}
-			return flags.printTable(cmd, []string{"#", "CODE", "QTY", "SIZE", "TOPPINGS", "EST_PRICE"}, rows)
+			if len(coupons) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "\nCoupons:\n")
+				couponRows := make([][]string, 0, len(coupons))
+				for _, c := range coupons {
+					couponRows = append(couponRows, []string{c.Code, fmt.Sprintf("%d", c.Qty)})
+				}
+				return flags.printTable(cmd, []string{"CODE", "QTY"}, couponRows)
+			}
+			return nil
 		},
 	}
 	return cmd

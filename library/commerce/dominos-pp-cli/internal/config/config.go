@@ -99,6 +99,7 @@ func (c *Config) SaveTokens(clientID, clientSecret, accessToken, refreshToken st
 	c.ClientID = clientID
 	c.ClientSecret = clientSecret
 	c.AccessToken = accessToken
+	c.DominosToken = accessToken
 	c.RefreshToken = refreshToken
 	c.TokenExpiry = expiry
 	return c.save()
@@ -106,6 +107,7 @@ func (c *Config) SaveTokens(clientID, clientSecret, accessToken, refreshToken st
 
 func (c *Config) ClearTokens() error {
 	c.AccessToken = ""
+	c.DominosToken = ""
 	c.RefreshToken = ""
 	c.TokenExpiry = time.Time{}
 	return c.save()

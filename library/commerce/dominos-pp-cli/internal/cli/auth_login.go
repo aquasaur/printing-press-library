@@ -9,7 +9,9 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/mvanhorn/printing-press-library/library/commerce/dominos-pp-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -59,6 +61,23 @@ func newAuthLoginCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return classifyAPIError(err)
 			}
+
+			// Extract and save token from login response
+			if statusCode >= 200 && statusCode < 300 {
+				var respMap map[string]any
+				if json.Unmarshal(data, &respMap) == nil {
+					token := extractToken(respMap)
+					if token != "" {
+						cfg, cfgErr := config.Load(flags.configPath)
+						if cfgErr == nil {
+							if saveErr := cfg.SaveTokens("", "", token, "", time.Time{}); saveErr == nil {
+								fmt.Fprintf(cmd.ErrOrStderr(), "Logged in successfully. Token saved to %s\n", cfg.Path)
+							}
+						}
+					}
+				}
+			}
+
 			if wantsHumanTable(cmd.OutOrStdout(), flags) {
 				// Check if response contains an array (directly or wrapped in "data")
 				var items []map[string]any
@@ -127,4 +146,16 @@ func newAuthLoginCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().BoolVar(&stdinBody, "stdin", false, "Read request body as JSON from stdin")
 
 	return cmd
+}
+
+// extractToken looks for common token field names in the login response.
+func extractToken(resp map[string]any) string {
+	for _, key := range []string{"access_token", "AccessToken", "token", "Token", "accessToken"} {
+		if v, ok := resp[key]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }

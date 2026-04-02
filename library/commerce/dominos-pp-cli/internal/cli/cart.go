@@ -18,6 +18,7 @@ type cartRecord struct {
 	ServiceMethod string `json:"service_method"`
 	AddressJSON   string `json:"address_json"`
 	ItemsJSON     string `json:"items_json"`
+	CouponsJSON   string `json:"coupons_json"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
 }
@@ -38,7 +39,7 @@ type cartTopping struct {
 
 func newCartCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "cart", Short: "Manage locally stored shopping carts"}
-	cmd.AddCommand(newCartNewCmd(flags), newCartAddCmd(flags), newCartRemoveCmd(flags), newCartShowCmd(flags))
+	cmd.AddCommand(newCartNewCmd(flags), newCartAddCmd(flags), newCartRemoveCmd(flags), newCartShowCmd(flags), newCartAddCouponCmd(flags), newCartRemoveCouponCmd(flags), newCartCheckoutCmd(flags))
 	return cmd
 }
 
@@ -81,7 +82,7 @@ func saveCart(s *store.Store, c *cartRecord, items []cartItem) error {
 	if err != nil {
 		return fmt.Errorf("marshaling cart items: %w", err)
 	}
-	return s.UpsertCart(c.ID, c.Name, c.StoreID, c.ServiceMethod, c.AddressJSON, string(data))
+	return s.UpsertCart(c.ID, c.Name, c.StoreID, c.ServiceMethod, c.AddressJSON, string(data), c.CouponsJSON)
 }
 
 func newUUID() (string, error) {

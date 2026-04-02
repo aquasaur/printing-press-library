@@ -17,6 +17,7 @@ func newAuthCmd(flags *rootFlags) *cobra.Command {
 		Short: "Manage authentication tokens",
 	}
 
+	cmd.AddCommand(newAuthLoginCmd(flags))
 	cmd.AddCommand(newAuthStatusCmd(flags))
 	cmd.AddCommand(newAuthSetTokenCmd(flags))
 	cmd.AddCommand(newAuthLogoutCmd(flags))
