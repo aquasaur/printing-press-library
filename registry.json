@@ -12,7 +12,7 @@
       "name": "postman-explore-pp-cli",
       "category": "developer-tools",
       "api": "postman-explore",
-      "description": "Search and browse the Postman API Network — 700K+ public collections, workspaces, and APIs.",
+      "description": "Search and browse the Postman API Network \u2014 700K+ public collections, workspaces, and APIs.",
       "path": "library/developer-tools/postman-explore-pp-cli"
     },
     {
@@ -21,6 +21,13 @@
       "api": "Steam Web API",
       "description": "Query Steam player profiles, game libraries, achievements, and friends from the terminal. 90/100 Grade A.",
       "path": "library/media-and-entertainment/steam-web-pp-cli"
+    },
+    {
+      "name": "pagliacci-pizza-pp-cli",
+      "category": "other",
+      "api": "Pagliacci Pizza",
+      "description": "Order pizza, browse menu, check rewards, and manage orders for Pagliacci Pizza in Seattle",
+      "path": "library/other/pagliacci-pizza-pp-cli"
     }
   ]
 }
