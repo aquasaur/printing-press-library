@@ -6,27 +6,19 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-var _ = strings.ReplaceAll // ensure import
-var _ = fmt.Sprintf        // ensure import
-var _ = io.ReadAll         // ensure import
-var _ = os.Stdin           // ensure import
-var _ json.RawMessage      // ensure import
-
-func newApiGetNetworkEntityCountsCmd(flags *rootFlags) *cobra.Command {
+func newNetworkentityGetNetworkEntityCountsCmd(flags *rootFlags) *cobra.Command {
 	var flagFlattenAPIVersions bool
 
 	cmd := &cobra.Command{
 		Use:   "get-network-entity-counts",
 		Aliases: []string{"list"},
 		Short: "Get total counts of entities on the network",
-		Example: "  postman-explore-pp-cli api get-network-entity-counts",
+		Example: "  postman-explore-pp-cli networkentity get-network-entity-counts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := flags.newClient()
 			if err != nil {
@@ -38,10 +30,32 @@ func newApiGetNetworkEntityCountsCmd(flags *rootFlags) *cobra.Command {
 			if flagFlattenAPIVersions != false {
 				params["flattenAPIVersions"] = fmt.Sprintf("%v", flagFlattenAPIVersions)
 			}
-			data, err := c.Get(path, params)
+			data, prov, err := resolveRead(c, flags, "networkentity", false, path, params)
 			if err != nil {
 				return classifyAPIError(err)
 			}
+			// Print provenance to stderr for human-facing output
+			{
+				var countItems []json.RawMessage
+				_ = json.Unmarshal(data, &countItems)
+				printProvenance(cmd, len(countItems), prov)
+			}
+			// For JSON output, wrap with provenance envelope before passing through flags
+			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
+				filtered := data
+				if flags.compact {
+					filtered = compactFields(filtered)
+				}
+				if flags.selectFields != "" {
+					filtered = filterFields(filtered, flags.selectFields)
+				}
+				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
+				if wrapErr != nil {
+					return wrapErr
+				}
+				return printOutput(cmd.OutOrStdout(), wrapped, true)
+			}
+			// For all other output modes (table, csv, plain, quiet), use the standard pipeline
 			if wantsHumanTable(cmd.OutOrStdout(), flags) {
 				var items []map[string]any
 				if json.Unmarshal(data, &items) == nil && len(items) > 0 {
@@ -57,7 +71,7 @@ func newApiGetNetworkEntityCountsCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
-	cmd.Flags().BoolVar(&flagFlattenAPIVersions, "flattenapiversions", true, "Flatten apiversions")
+	cmd.Flags().BoolVar(&flagFlattenAPIVersions, "flatten-api-versions", true, "Flatten apiversions")
 
 	return cmd
 }

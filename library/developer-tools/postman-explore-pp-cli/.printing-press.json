@@ -1,8 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-03-29T22:01:57Z",
+  "generated_at": "2026-04-04T05:01:21.88475Z",
   "printing_press_version": "0.4.0",
   "api_name": "postman-explore",
   "cli_name": "postman-explore-pp-cli",
-  "spec_format": "internal"
+  "spec_path": "/Users/tmchow/printing-press/manuscripts/postman-explore-pp-cli/20260403-151803/research/postman-explore-spec.yaml",
+  "run_id": "20260403-220048",
+  "catalog_entry": "postman-explore",
+  "category": "developer-tools",
+  "description": "Public API network directory for discovering community collections, workspaces, and APIs"
 }

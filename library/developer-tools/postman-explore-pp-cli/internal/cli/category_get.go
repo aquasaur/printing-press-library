@@ -6,42 +6,55 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-var _ = strings.ReplaceAll // ensure import
-var _ = fmt.Sprintf        // ensure import
-var _ = io.ReadAll         // ensure import
-var _ = os.Stdin           // ensure import
-var _ json.RawMessage      // ensure import
-
-func newApiGetCategoryCmd(flags *rootFlags) *cobra.Command {
+func newCategoryGetCmd(flags *rootFlags) *cobra.Command {
 
 	cmd := &cobra.Command{
-		Use:   "get-category <slug>",
-		Aliases: []string{"get"},
+		Use:   "get <slug>",
 		Short: "Get details for a specific category",
-		Example: "  postman-explore-pp-cli api get-category example-value",
+		Example: "  postman-explore-pp-cli category get example-value",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
 			c, err := flags.newClient()
 			if err != nil {
 				return err
 			}
 
 			path := "/v2/api/category/{slug}"
-			if len(args) < 1 {
-				return usageErr(fmt.Errorf("slug is required\nUsage: %s %s <%s>", cmd.Root().Name(), cmd.CommandPath(), "slug"))
-			}
 			path = replacePathParam(path, "slug", args[0])
 			params := map[string]string{}
-			data, err := c.Get(path, params)
+			data, prov, err := resolveRead(c, flags, "category", false, path, params)
 			if err != nil {
 				return classifyAPIError(err)
 			}
+			// Print provenance to stderr for human-facing output
+			{
+				var countItems []json.RawMessage
+				_ = json.Unmarshal(data, &countItems)
+				printProvenance(cmd, len(countItems), prov)
+			}
+			// For JSON output, wrap with provenance envelope before passing through flags
+			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
+				filtered := data
+				if flags.compact {
+					filtered = compactFields(filtered)
+				}
+				if flags.selectFields != "" {
+					filtered = filterFields(filtered, flags.selectFields)
+				}
+				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
+				if wrapErr != nil {
+					return wrapErr
+				}
+				return printOutput(cmd.OutOrStdout(), wrapped, true)
+			}
+			// For all other output modes (table, csv, plain, quiet), use the standard pipeline
 			if wantsHumanTable(cmd.OutOrStdout(), flags) {
 				var items []map[string]any
 				if json.Unmarshal(data, &items) == nil && len(items) > 0 {

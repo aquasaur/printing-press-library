@@ -32,6 +32,7 @@ type rootFlags struct {
 	configPath   string
 	timeout      time.Duration
 	rateLimit    float64
+	dataSource   string
 }
 
 // Execute runs the CLI in non-interactive mode: never prompts, all values via flags or stdin.
@@ -40,7 +41,7 @@ func Execute() error {
 
 	rootCmd := &cobra.Command{
 		Use:           "postman-explore-pp-cli",
-		Short:         "Search and browse the Postman API Network — 700K+ public collections, workspaces, and APIs",
+		Short:         "Manage postman-explore resources via the postman-explore API",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version,
@@ -62,6 +63,7 @@ func Execute() error {
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 	rootCmd.PersistentFlags().BoolVar(&humanFriendly, "human-friendly", false, "Enable colored output and rich formatting")
 	rootCmd.PersistentFlags().BoolVar(&flags.agent, "agent", false, "Set all agent-friendly defaults (--json --compact --no-input --no-color --yes)")
+	rootCmd.PersistentFlags().StringVar(&flags.dataSource, "data-source", "auto", "Data source for read commands: auto (live with local fallback), live (API only), local (synced data only)")
 	rootCmd.PersistentFlags().Float64Var(&flags.rateLimit, "rate-limit", 2, "Max requests per second (0 to disable, default 2 for sniffed APIs)")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -82,20 +84,23 @@ func Execute() error {
 				noColor = true
 			}
 		}
+		switch flags.dataSource {
+		case "auto", "live", "local":
+			// valid
+		default:
+			return fmt.Errorf("invalid --data-source value %q: must be auto, live, or local", flags.dataSource)
+		}
 		return nil
 	}
-	rootCmd.AddCommand(newSearchAllSearchAllCmd(&flags))
-	rootCmd.AddCommand(newBrowseCmd(&flags))
-	rootCmd.AddCommand(newCategoriesCmd(&flags))
-	rootCmd.AddCommand(newStatsCmd(&flags))
-	rootCmd.AddCommand(newTeamsCmd(&flags))
-	rootCmd.AddCommand(newTrendingCmd(&flags))
-	rootCmd.AddCommand(newOpenCmd(&flags))
-	rootCmd.AddCommand(newApiCmd(&flags))
+	rootCmd.AddCommand(newCategoryCmd(&flags)) 
+	rootCmd.AddCommand(newNetworkentityCmd(&flags)) 
+	rootCmd.AddCommand(newSearchAllCmd(&flags)) 
+	rootCmd.AddCommand(newTeamCmd(&flags)) 
 	rootCmd.AddCommand(newDoctorCmd(&flags))
 	rootCmd.AddCommand(newAuthCmd(&flags))
 	rootCmd.AddCommand(newExportCmd(&flags))
 	rootCmd.AddCommand(newImportCmd(&flags))
+	rootCmd.AddCommand(newSearchCmd(&flags))
 	rootCmd.AddCommand(newSyncCmd(&flags))
 	rootCmd.AddCommand(newAnalyticsCmd(&flags))
 	rootCmd.AddCommand(newWorkflowCmd(&flags))

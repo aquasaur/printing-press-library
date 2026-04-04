@@ -32,8 +32,8 @@
     {
       "name": "postman-explore-pp-cli",
       "category": "developer-tools",
-      "api": "postman-explore",
-      "description": "Search and browse the Postman API Network \u2014 700K+ public collections, workspaces, and APIs.",
+      "api": "Postman Explore",
+      "description": "Search and browse the Postman API Network",
       "path": "library/developer-tools/postman-explore-pp-cli"
     },
     {

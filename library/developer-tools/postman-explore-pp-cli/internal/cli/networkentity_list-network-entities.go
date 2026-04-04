@@ -6,31 +6,23 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-var _ = strings.ReplaceAll // ensure import
-var _ = fmt.Sprintf        // ensure import
-var _ = io.ReadAll         // ensure import
-var _ = os.Stdin           // ensure import
-var _ json.RawMessage      // ensure import
-
-func newApiListNetworkEntitiesCmd(flags *rootFlags) *cobra.Command {
+func newNetworkentityListNetworkEntitiesCmd(flags *rootFlags) *cobra.Command {
 	var flagEntityType string
 	var flagLimit int
 	var flagOffset int
 	var flagSort string
-	var flagCategoryId int
+	var flagCategoryId string
 	var flagAll bool
 
 	cmd := &cobra.Command{
 		Use:   "list-network-entities",
 		Short: "Browse public entities on the API network",
-		Example: "  postman-explore-pp-cli api list-network-entities",
+		Example: "  postman-explore-pp-cli networkentity list-network-entities",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := flags.newClient()
 			if err != nil {
@@ -38,7 +30,7 @@ func newApiListNetworkEntitiesCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/v1/api/networkentity"
-			data, err := paginatedGet(c, path, map[string]string{
+			data, prov, err := resolvePaginatedRead(c, flags, "networkentity", path, map[string]string{
 				"entityType": fmt.Sprintf("%v", flagEntityType),
 				"limit": fmt.Sprintf("%v", flagLimit),
 				"offset": fmt.Sprintf("%v", flagOffset),
@@ -48,6 +40,28 @@ func newApiListNetworkEntitiesCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return classifyAPIError(err)
 			}
+			// Print provenance to stderr for human-facing output
+			{
+				var countItems []json.RawMessage
+				_ = json.Unmarshal(data, &countItems)
+				printProvenance(cmd, len(countItems), prov)
+			}
+			// For JSON output, wrap with provenance envelope before passing through flags
+			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
+				filtered := data
+				if flags.compact {
+					filtered = compactFields(filtered)
+				}
+				if flags.selectFields != "" {
+					filtered = filterFields(filtered, flags.selectFields)
+				}
+				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
+				if wrapErr != nil {
+					return wrapErr
+				}
+				return printOutput(cmd.OutOrStdout(), wrapped, true)
+			}
+			// For all other output modes (table, csv, plain, quiet), use the standard pipeline
 			if wantsHumanTable(cmd.OutOrStdout(), flags) {
 				var items []map[string]any
 				if json.Unmarshal(data, &items) == nil && len(items) > 0 {
@@ -63,12 +77,12 @@ func newApiListNetworkEntitiesCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
-	cmd.Flags().StringVar(&flagEntityType, "entitytype", "", "Type of entity to browse")
-	_ = cmd.MarkFlagRequired("entitytype")
+	cmd.Flags().StringVar(&flagEntityType, "entity-type", "", "Type of entity to browse")
+	_ = cmd.MarkFlagRequired("entity-type")
 	cmd.Flags().IntVar(&flagLimit, "limit", 20, "Number of results per page")
 	cmd.Flags().IntVar(&flagOffset, "offset", 0, "Pagination offset")
 	cmd.Flags().StringVar(&flagSort, "sort", "popular", "Sort order for results")
-	cmd.Flags().IntVar(&flagCategoryId, "categoryid", 0, "Filter by category ID (numeric, from categories endpoint)")
+	cmd.Flags().StringVar(&flagCategoryId, "category-id", "", "Filter by category ID (numeric, from categories endpoint)")
 	cmd.Flags().BoolVar(&flagAll, "all", false, "Fetch all pages")
 
 	return cmd

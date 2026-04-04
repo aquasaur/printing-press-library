@@ -33,7 +33,7 @@ func Load(configPath string) (*Config, error) {
 	// Resolve config path
 	path := configPath
 	if path == "" {
-		path = os.Getenv("POSTMAN-EXPLORE_CONFIG")
+		path = os.Getenv("POSTMAN_EXPLORE_CONFIG")
 	}
 	if path == "" {
 		home, _ := os.UserHomeDir()
@@ -52,7 +52,7 @@ func Load(configPath string) (*Config, error) {
 	// Env var overrides
 
 	// Base URL override (used by printing-press verify to point at mock/test servers)
-	if v := os.Getenv("POSTMAN-EXPLORE_BASE_URL"); v != "" {
+	if v := os.Getenv("POSTMAN_EXPLORE_BASE_URL"); v != "" {
 		cfg.BaseURL = v
 	}
 

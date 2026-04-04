@@ -6,28 +6,20 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-var _ = strings.ReplaceAll // ensure import
-var _ = fmt.Sprintf        // ensure import
-var _ = io.ReadAll         // ensure import
-var _ = os.Stdin           // ensure import
-var _ json.RawMessage      // ensure import
-
-func newApiListTeamsCmd(flags *rootFlags) *cobra.Command {
+func newTeamListCmd(flags *rootFlags) *cobra.Command {
 	var flagLimit int
 	var flagSort string
 	var flagAll bool
 
 	cmd := &cobra.Command{
-		Use:   "list-teams",
+		Use:   "list",
 		Short: "List publisher teams on the API network",
-		Example: "  postman-explore-pp-cli api list-teams",
+		Example: "  postman-explore-pp-cli team list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := flags.newClient()
 			if err != nil {
@@ -35,13 +27,35 @@ func newApiListTeamsCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/v1/api/team"
-			data, err := paginatedGet(c, path, map[string]string{
+			data, prov, err := resolvePaginatedRead(c, flags, "team", path, map[string]string{
 				"limit": fmt.Sprintf("%v", flagLimit),
 				"sort": fmt.Sprintf("%v", flagSort),
 			}, flagAll, "", "", "")
 			if err != nil {
 				return classifyAPIError(err)
 			}
+			// Print provenance to stderr for human-facing output
+			{
+				var countItems []json.RawMessage
+				_ = json.Unmarshal(data, &countItems)
+				printProvenance(cmd, len(countItems), prov)
+			}
+			// For JSON output, wrap with provenance envelope before passing through flags
+			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
+				filtered := data
+				if flags.compact {
+					filtered = compactFields(filtered)
+				}
+				if flags.selectFields != "" {
+					filtered = filterFields(filtered, flags.selectFields)
+				}
+				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
+				if wrapErr != nil {
+					return wrapErr
+				}
+				return printOutput(cmd.OutOrStdout(), wrapped, true)
+			}
+			// For all other output modes (table, csv, plain, quiet), use the standard pipeline
 			if wantsHumanTable(cmd.OutOrStdout(), flags) {
 				var items []map[string]any
 				if json.Unmarshal(data, &items) == nil && len(items) > 0 {

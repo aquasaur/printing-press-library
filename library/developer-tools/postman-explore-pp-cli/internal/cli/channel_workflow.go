@@ -6,8 +6,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/mvanhorn/printing-press-library/library/developer-tools/postman-explore-pp-cli/internal/store"
@@ -57,7 +55,7 @@ and full resync. After archiving, use 'search' for instant full-text search.`,
 			}
 			defer s.Close()
 
-			resources := []string{"api",  }
+			resources := []string{"api", "collection", "flow", "team", "workspace",  }
 			totalSynced := 0
 
 			for _, resource := range resources {
@@ -137,7 +135,7 @@ and full resync. After archiving, use 'search' for instant full-text search.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&dbPath, "db", "", "Database path (default: ~/.config/postman-explore-pp-cli/store.db)")
+	cmd.Flags().StringVar(&dbPath, "db", "", "Database path (default: ~/.local/share/postman-explore-pp-cli/data.db)")
 	cmd.Flags().BoolVar(&full, "full", false, "Full re-archive (ignore previous sync state)")
 
 	return cmd
@@ -197,7 +195,4 @@ func newWorkflowStatusCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
-func defaultDBPath(name string) string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", name, "store.db")
-}
+// defaultDBPath is defined in helpers.go

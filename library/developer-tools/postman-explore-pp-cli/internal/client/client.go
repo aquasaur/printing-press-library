@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,47 +22,6 @@ import (
 
 	"github.com/mvanhorn/printing-press-library/library/developer-tools/postman-explore-pp-cli/internal/config"
 )
-
-// proxyEnvelope wraps every outbound request for the Postman workspace proxy.
-type proxyEnvelope struct {
-	Service string `json:"service"`
-	Method  string `json:"method"`
-	Path    string `json:"path"`
-	Body    any    `json:"body,omitempty"`
-}
-
-// serviceForPath maps an API path to the correct Postman proxy service name.
-func serviceForPath(path string) string {
-	switch {
-	case strings.HasPrefix(path, "/v1/api/") || strings.HasPrefix(path, "/v2/api/"):
-		return "publishing"
-	case strings.HasPrefix(path, "/search-all"):
-		return "search"
-	case strings.HasPrefix(path, "/notebooks/"):
-		return "notebook"
-	case strings.HasPrefix(path, "/v1/tags"):
-		return "tagging"
-	default:
-		return "publishing"
-	}
-}
-
-// buildProxyPath returns the path with query params appended (e.g. /v1/api/foo?limit=10).
-func buildProxyPath(path string, params map[string]string) string {
-	if len(params) == 0 {
-		return path
-	}
-	parts := make([]string, 0, len(params))
-	for k, v := range params {
-		if v != "" {
-			parts = append(parts, k+"="+v)
-		}
-	}
-	if len(parts) == 0 {
-		return path
-	}
-	return path + "?" + strings.Join(parts, "&")
-}
 
 type Client struct {
 	BaseURL    string
@@ -158,6 +118,53 @@ func (l *adaptiveLimiter) Rate() float64 {
 	return l.rate
 }
 
+
+// proxyEnvelope is the JSON wrapper sent to the proxy endpoint.
+type proxyEnvelope struct {
+	Service string `json:"service"`
+	Method  string `json:"method"`
+	Path    string `json:"path"`
+	Body    any    `json:"body,omitempty"`
+}
+
+// serviceForPath determines the proxy service name from the API path.
+func serviceForPath(path string) string {
+	// Route by longest matching prefix
+	bestMatch := ""
+	bestService := ""
+	for prefix, svc := range map[string]string{
+		"/": "publishing",
+		"/search-all": "search",
+	} {
+		if strings.HasPrefix(path, prefix) && len(prefix) > len(bestMatch) {
+			bestMatch = prefix
+			bestService = svc
+		}
+	}
+	if bestService != "" {
+		return bestService
+	}
+	return "postman-explore" // default: API name slug
+}
+
+// buildProxyPath appends query params into the path string for the envelope.
+func buildProxyPath(path string, params map[string]string) string {
+	if len(params) == 0 {
+		return path
+	}
+	parts := make([]string, 0, len(params))
+	for k, v := range params {
+		if v != "" {
+			parts = append(parts, k+"="+v)
+		}
+	}
+	if len(parts) == 0 {
+		return path
+	}
+	return path + "?" + strings.Join(parts, "&")
+}
+
+
 // APIError carries HTTP status information for structured exit codes.
 type APIError struct {
 	Method     string
@@ -189,13 +196,13 @@ func (c *Client) RateLimit() float64 {
 
 func (c *Client) Get(path string, params map[string]string) (json.RawMessage, error) {
 	// Check cache for GET requests
-	if !c.NoCache && c.cacheDir != "" {
+	if !c.NoCache && !c.DryRun && c.cacheDir != "" {
 		if cached, ok := c.readCache(path, params); ok {
 			return cached, nil
 		}
 	}
 	result, _, err := c.do("GET", path, params, nil)
-	if err == nil && !c.NoCache && c.cacheDir != "" {
+	if err == nil && !c.NoCache && !c.DryRun && c.cacheDir != "" {
 		c.writeCache(path, params, result)
 	}
 	return result, err
@@ -246,22 +253,21 @@ func (c *Client) Patch(path string, body any) (json.RawMessage, int, error) {
 }
 
 func (c *Client) do(method, path string, params map[string]string, body any) (json.RawMessage, int, error) {
-	proxyPath := buildProxyPath(path, params)
-	envelope := proxyEnvelope{
-		Service: serviceForPath(path),
-		Method:  method,
-		Path:    proxyPath,
-		Body:    body,
-	}
+	// Proxy-envelope: all requests are POST'd to BaseURL with a JSON envelope
+	targetURL := c.BaseURL
 
-	envBytes, err := json.Marshal(envelope)
-	if err != nil {
-		return nil, 0, fmt.Errorf("marshaling proxy envelope: %w", err)
+	var bodyBytes []byte
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, 0, fmt.Errorf("marshaling body: %w", err)
+		}
+		bodyBytes = b
 	}
 
 	// Build the request for dry-run display or actual execution
 	if c.DryRun {
-		return c.dryRun(method, c.BaseURL, params, envBytes)
+		return c.dryRun(method, targetURL, path, params, bodyBytes)
 	}
 
 	const maxRetries = 3
@@ -270,13 +276,33 @@ func (c *Client) do(method, path string, params map[string]string, body any) (js
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		// Proactive rate limiting — wait before sending
 		c.limiter.Wait()
+		// Build the proxy envelope
+		envelope := proxyEnvelope{
+			Service: serviceForPath(path),
+			Method:  method,
+			Path:    buildProxyPath(path, params),
+		}
+		if bodyBytes != nil {
+			envelope.Body = json.RawMessage(bodyBytes)
+		}
+		envelopeBytes, err := json.Marshal(envelope)
+		if err != nil {
+			return nil, 0, fmt.Errorf("marshaling proxy envelope: %w", err)
+		}
 
-		req, err := http.NewRequest("POST", c.BaseURL, bytes.NewReader(envBytes))
+		req, err := http.NewRequest("POST", targetURL, strings.NewReader(string(envelopeBytes)))
 		if err != nil {
 			return nil, 0, fmt.Errorf("creating request: %w", err)
 		}
-
 		req.Header.Set("Content-Type", "application/json")
+
+		authHeader, err := c.authHeader()
+		if err != nil {
+			return nil, 0, err
+		}
+		if authHeader != "" {
+			req.Header.Set("Authorization", authHeader)
+		}
 		req.Header.Set("User-Agent", "postman-explore-pp-cli/1.0.0")
 
 		resp, err := c.HTTPClient.Do(req)
@@ -290,6 +316,7 @@ func (c *Client) do(method, path string, params map[string]string, body any) (js
 		if err != nil {
 			return nil, 0, fmt.Errorf("reading response: %w", err)
 		}
+		respBody = sanitizeJSONResponse(respBody)
 
 		// Success
 		if resp.StatusCode < 400 {
@@ -330,19 +357,107 @@ func (c *Client) do(method, path string, params map[string]string, body any) (js
 	return nil, 0, lastErr
 }
 
-func (c *Client) dryRun(method, url string, params map[string]string, envelopeBytes []byte) (json.RawMessage, int, error) {
-	fmt.Fprintf(os.Stderr, "POST %s\n", url)
-	if envelopeBytes != nil {
-		var pretty json.RawMessage
-		if json.Unmarshal(envelopeBytes, &pretty) == nil {
-			enc := json.NewEncoder(os.Stderr)
-			enc.SetIndent("  ", "  ")
-			fmt.Fprintf(os.Stderr, "  Proxy envelope:\n")
-			enc.Encode(pretty)
+func (c *Client) dryRun(method, targetURL, path string, params map[string]string, body []byte) (json.RawMessage, int, error) {
+	// Show the proxy envelope that would be sent
+	envelope := proxyEnvelope{
+		Service: serviceForPath(path),
+		Method:  method,
+		Path:    buildProxyPath(path, params),
+	}
+	if body != nil {
+		envelope.Body = json.RawMessage(body)
+	}
+	fmt.Fprintf(os.Stderr, "POST %s\n", targetURL)
+	envelopeJSON, _ := json.MarshalIndent(envelope, "  ", "  ")
+	fmt.Fprintf(os.Stderr, "  Envelope:\n  %s\n", string(envelopeJSON))
+	authHeader, err := c.authHeader()
+	if err != nil {
+		return nil, 0, err
+	}
+	if authHeader != "" {
+		// Mask token for safety
+		auth := authHeader
+		if len(auth) > 20 {
+			auth = auth[:15] + "..."
 		}
+		fmt.Fprintf(os.Stderr, "  Authorization: %s\n", auth)
 	}
 	fmt.Fprintf(os.Stderr, "\n(dry run - no request sent)\n")
 	return json.RawMessage(`{"dry_run": true}`), 0, nil
+}
+
+func (c *Client) authHeader() (string, error) {
+	if c.Config == nil {
+		return "", nil
+	}
+	if c.Config.AccessToken != "" && !c.Config.TokenExpiry.IsZero() && time.Now().After(c.Config.TokenExpiry) && c.Config.RefreshToken != "" {
+		if err := c.refreshAccessToken(); err != nil {
+			return "", err
+		}
+	}
+	return c.Config.AuthHeader(), nil
+}
+
+func (c *Client) refreshAccessToken() error {
+	if c.Config == nil {
+		return nil
+	}
+	if c.Config.RefreshToken == "" {
+		return nil
+	}
+
+	tokenURL := ""
+	if tokenURL == "" {
+		return nil
+	}
+
+	params := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {c.Config.RefreshToken},
+		"client_id":     {c.Config.ClientID},
+	}
+	if c.Config.ClientSecret != "" {
+		params.Set("client_secret", c.Config.ClientSecret)
+	}
+
+	resp, err := c.HTTPClient.PostForm(tokenURL, params)
+	if err != nil {
+		return fmt.Errorf("refreshing access token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("refreshing access token: HTTP %d: %s", resp.StatusCode, truncateBody(body))
+	}
+
+	var tokenResp struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return fmt.Errorf("parsing refresh response: %w", err)
+	}
+	if tokenResp.AccessToken == "" {
+		return fmt.Errorf("refreshing access token: no access token in response")
+	}
+
+	refreshToken := c.Config.RefreshToken
+	if tokenResp.RefreshToken != "" {
+		refreshToken = tokenResp.RefreshToken
+	}
+
+	expiry := time.Time{}
+	if tokenResp.ExpiresIn > 0 {
+		expiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+	}
+
+	if err := c.Config.SaveTokens(c.Config.ClientID, c.Config.ClientSecret, tokenResp.AccessToken, refreshToken, expiry); err != nil {
+		return fmt.Errorf("saving refreshed token: %w", err)
+	}
+
+	return nil
 }
 
 func retryAfter(resp *http.Response) time.Duration {
@@ -360,6 +475,31 @@ func retryAfter(resp *http.Response) time.Duration {
 		}
 	}
 	return 5 * time.Second
+}
+
+// sanitizeJSONResponse strips known JSONP/XSSI prefixes and UTF-8 BOM from
+// response bodies so that downstream JSON parsing succeeds. For clean JSON
+// responses these checks are no-ops.
+func sanitizeJSONResponse(body []byte) []byte {
+	// UTF-8 BOM
+	body = bytes.TrimPrefix(body, []byte("\xEF\xBB\xBF"))
+
+	// JSONP/XSSI prefixes, ordered longest-first where prefixes overlap
+	prefixes := [][]byte{
+		[]byte(")]}'\n"),
+		[]byte(")]}'"),
+		[]byte("{}&&"),
+		[]byte("for(;;);"),
+		[]byte("while(1);"),
+	}
+	for _, p := range prefixes {
+		if bytes.HasPrefix(body, p) {
+			body = bytes.TrimPrefix(body, p)
+			body = bytes.TrimLeft(body, " \t\r\n")
+			break
+		}
+	}
+	return body
 }
 
 func truncateBody(b []byte) string {

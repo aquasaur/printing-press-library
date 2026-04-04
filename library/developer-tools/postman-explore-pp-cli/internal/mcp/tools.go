@@ -22,28 +22,28 @@ import (
 // RegisterTools registers all API operations as MCP tools.
 func RegisterTools(s *server.MCPServer) {
 	s.AddTool(
-		mcplib.NewTool("api_get-category",
+		mcplib.NewTool("category_get",
 			mcplib.WithDescription("Get details for a specific category"),
 			mcplib.WithString("slug", mcplib.Required(), mcplib.Description("Category URL slug (e.g., artificial-intelligence, devops)")),
 		),
 		makeAPIHandler("GET", "/v2/api/category/{slug}", []string{"slug", }),
 	)
 	s.AddTool(
-		mcplib.NewTool("api_get-network-entity-counts",
-			mcplib.WithDescription("Get total counts of entities on the network"),
-			mcplib.WithString("flattenAPIVersions", mcplib.Description("Flatten apiversions")),
-		),
-		makeAPIHandler("GET", "/v1/api/networkentity/count", []string{ }),
-	)
-	s.AddTool(
-		mcplib.NewTool("api_list-categories",
+		mcplib.NewTool("category_list-categories",
 			mcplib.WithDescription("List all API categories"),
 			mcplib.WithString("sort", mcplib.Description("Sort order")),
 		),
 		makeAPIHandler("GET", "/v2/api/category", []string{ }),
 	)
 	s.AddTool(
-		mcplib.NewTool("api_list-network-entities",
+		mcplib.NewTool("networkentity_get-network-entity-counts",
+			mcplib.WithDescription("Get total counts of entities on the network"),
+			mcplib.WithString("flattenAPIVersions", mcplib.Description("Flatten apiversions")),
+		),
+		makeAPIHandler("GET", "/v1/api/networkentity/count", []string{ }),
+	)
+	s.AddTool(
+		mcplib.NewTool("networkentity_list-network-entities",
 			mcplib.WithDescription("Browse public entities on the API network"),
 			mcplib.WithString("entityType", mcplib.Required(), mcplib.Description("Type of entity to browse")),
 			mcplib.WithString("limit", mcplib.Description("Number of results per page")),
@@ -54,18 +54,18 @@ func RegisterTools(s *server.MCPServer) {
 		makeAPIHandler("GET", "/v1/api/networkentity", []string{ }),
 	)
 	s.AddTool(
-		mcplib.NewTool("api_list-teams",
+		mcplib.NewTool("search-all_search_all",
+			mcplib.WithDescription("Full-text search across the public API network"),
+		),
+		makeAPIHandler("POST", "/search-all", []string{ }),
+	)
+	s.AddTool(
+		mcplib.NewTool("team_list",
 			mcplib.WithDescription("List publisher teams on the API network"),
 			mcplib.WithString("limit", mcplib.Description("Limit")),
 			mcplib.WithString("sort", mcplib.Description("Sort")),
 		),
 		makeAPIHandler("GET", "/v1/api/team", []string{ }),
-	)
-	s.AddTool(
-		mcplib.NewTool("search-all_search_all",
-			mcplib.WithDescription("Full-text search across the public API network"),
-		),
-		makeAPIHandler("POST", "/search-all", []string{ }),
 	)
 	// Sync tool
 	s.AddTool(
@@ -76,6 +76,15 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithBoolean("full", mcplib.Description("Full resync ignoring checkpoints")),
 		),
 		handleSync,
+	)
+	// Search tool
+	s.AddTool(
+		mcplib.NewTool("search",
+			mcplib.WithDescription("Full-text search across synced data"),
+			mcplib.WithString("query", mcplib.Required(), mcplib.Description("Search query")),
+			mcplib.WithNumber("limit", mcplib.Description("Max results (default 25)")),
+		),
+		handleSearch,
 	)
 	// SQL tool
 	s.AddTool(
@@ -142,8 +151,14 @@ func makeAPIHandler(method, pathTemplate string, positionalParams []string) serv
 			switch {
 			case strings.Contains(msg, "HTTP 409"):
 				return mcplib.NewToolResultText("already exists (no-op)"), nil
-			case strings.Contains(msg, "HTTP 401") || strings.Contains(msg, "HTTP 403"):
-				return mcplib.NewToolResultError("authentication failed: " + msg + "\nhint: check API credentials"), nil
+			case strings.Contains(msg, "HTTP 401"):
+				return mcplib.NewToolResultError("authentication failed: " + msg +
+					"\nhint: check your API credentials." +
+					"\n      Run 'postman-explore-pp-cli doctor' to check auth status."), nil
+			case strings.Contains(msg, "HTTP 403"):
+				return mcplib.NewToolResultError("permission denied: " + msg +
+					"\nhint: your credentials are valid but lack access to this resource." +
+					"\n      Run 'postman-explore-pp-cli doctor' to check auth status."), nil
 			case strings.Contains(msg, "HTTP 404"):
 				if method == "DELETE" {
 					return mcplib.NewToolResultText("already deleted (no-op)"), nil
@@ -189,9 +204,37 @@ func dbPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "share", "postman-explore-pp-cli", "data.db")
 }
+// Note: MCP tools use their own dbPath() because they are in a separate package (main, not cli).
+// The CLI's defaultDBPath() in the cli package uses the same canonical path.
 
 func handleSync(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	return mcplib.NewToolResultText("sync not yet implemented via MCP - use the CLI: postman-explore-pp-cli sync"), nil
+}
+
+func handleSearch(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	query, ok := req.Params.Arguments["query"].(string)
+	if !ok || query == "" {
+		return mcplib.NewToolResultError("query is required"), nil
+	}
+
+	limit := 25
+	if v, ok := req.Params.Arguments["limit"].(float64); ok && v > 0 {
+		limit = int(v)
+	}
+
+	db, err := store.Open(dbPath())
+	if err != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("opening database: %v", err)), nil
+	}
+	defer db.Close()
+
+	results, err := db.Search(query, limit)
+	if err != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("search failed: %v", err)), nil
+	}
+
+	data, _ := json.MarshalIndent(results, "", "  ")
+	return mcplib.NewToolResultText(string(data)), nil
 }
 
 func handleSQL(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {

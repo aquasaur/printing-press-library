@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/mvanhorn/printing-press-library/library/developer-tools/postman-explore-pp-cli/internal/store"
@@ -35,8 +34,7 @@ Data must be synced first with the sync command.`,
   postman-explore-pp-cli analytics --type messages --group-by channel_id --limit 10 --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dbPath == "" {
-				home, _ := os.UserHomeDir()
-				dbPath = filepath.Join(home, ".local", "share", "postman-explore-pp-cli", "data.db")
+				dbPath = defaultDBPath("postman-explore-pp-cli")
 			}
 
 			db, err := store.Open(dbPath)

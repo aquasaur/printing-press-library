@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -62,8 +61,7 @@ Once synced, use the 'search' command for instant full-text search.`,
 			c.NoCache = true
 
 			if dbPath == "" {
-				home, _ := os.UserHomeDir()
-				dbPath = filepath.Join(home, ".local", "share", "postman-explore-pp-cli", "data.db")
+				dbPath = defaultDBPath("postman-explore-pp-cli")
 			}
 
 			db, err := store.Open(dbPath)
@@ -169,23 +167,13 @@ func syncResource(c interface {
 	Get(string, map[string]string) (json.RawMessage, error)
 	RateLimit() float64
 }, db *store.Store, resource, sinceTS string, full bool) syncResult {
-	// Dispatch typed resources to specialized sync functions
-	switch resource {
-	case "categories":
-		return syncCategories(c, db)
-	case "teams":
-		return syncTeams(c, db)
-	case "collections":
-		return syncCollections(c, db)
-	}
-
 	started := time.Now()
 
 	if !humanFriendly {
 		fmt.Fprintf(os.Stderr, `{"event":"sync_start","resource":"%s"}`+"\n", resource)
 	}
 
-	path := "/" + resource
+	path := syncResourcePath(resource)
 	var totalCount int
 
 	// Resume cursor from sync_state (unless --full cleared it)
@@ -304,10 +292,10 @@ type paginationDefaults struct {
 }
 
 // determinePaginationDefaults returns the pagination parameter names to use.
-// Uses sensible defaults matching common API conventions.
+// Values are detected from the API spec by the profiler at generation time.
 func determinePaginationDefaults() paginationDefaults {
 	return paginationDefaults{
-		cursorParam: "after",
+		cursorParam: "offset",
 		limitParam:  "limit",
 		limit:       100,
 	}
@@ -438,10 +426,29 @@ func parseSinceDuration(s string) (time.Time, error) {
 
 func defaultSyncResources() []string {
 	return []string{
-		"categories",
-		"teams",
-		"collections",
+		"api",
+		"collection",
+		"flow",
+		"team",
+		"workspace",
 	}
+}
+
+// syncResourcePath maps resource names to their actual API endpoint paths.
+// For REST APIs this is typically "/<resource>". For non-REST APIs (e.g., Steam)
+// this preserves the actual endpoint path like "/ISteamApps/GetAppList/v2".
+func syncResourcePath(resource string) string {
+	paths := map[string]string{
+		"api": "/v1/api/networkentity?entityType=api",
+		"collection": "/v1/api/networkentity?entityType=collection",
+		"flow": "/v1/api/networkentity?entityType=flow",
+		"team": "/v1/api/team",
+		"workspace": "/v1/api/networkentity?entityType=workspace",
+	}
+	if p, ok := paths[resource]; ok {
+		return p
+	}
+	return "/" + resource
 }
 
 func extractID(obj map[string]any) string {
@@ -451,251 +458,4 @@ func extractID(obj map[string]any) string {
 		}
 	}
 	return ""
-}
-
-// syncCategories fetches all categories from /v2/api/category and upserts them into the typed table.
-func syncCategories(c interface {
-	Get(string, map[string]string) (json.RawMessage, error)
-	RateLimit() float64
-}, db *store.Store) syncResult {
-	started := time.Now()
-	resource := "categories"
-
-	if !humanFriendly {
-		fmt.Fprintf(os.Stderr, `{"event":"sync_start","resource":"%s"}`+"\n", resource)
-	}
-
-	data, err := c.Get("/v2/api/category", map[string]string{})
-	if err != nil {
-		return syncResult{Resource: resource, Err: fmt.Errorf("fetching categories: %w", err), Duration: time.Since(started)}
-	}
-
-	var items []map[string]any
-	if err := json.Unmarshal(data, &items); err != nil {
-		// Try envelope: {"data": [...]}
-		var envelope map[string]json.RawMessage
-		if err2 := json.Unmarshal(data, &envelope); err2 == nil {
-			for _, key := range []string{"data", "results", "items", "categories"} {
-				if raw, ok := envelope[key]; ok {
-					if json.Unmarshal(raw, &items) == nil && len(items) > 0 {
-						break
-					}
-				}
-			}
-		}
-		if len(items) == 0 {
-			return syncResult{Resource: resource, Err: fmt.Errorf("parsing categories response: %w", err), Duration: time.Since(started)}
-		}
-	}
-
-	var count int
-	for _, item := range items {
-		if err := db.UpsertCategory(item); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: skipping category: %v\n", err)
-			continue
-		}
-		count++
-	}
-
-	_ = db.SaveSyncState(resource, "", count)
-
-	if humanFriendly {
-		fmt.Fprintf(os.Stderr, "  %s: %d synced (done)\n", resource, count)
-	} else {
-		fmt.Fprintf(os.Stderr, `{"event":"sync_complete","resource":"%s","total":%d,"duration_ms":%d}`+"\n", resource, count, time.Since(started).Milliseconds())
-	}
-
-	return syncResult{Resource: resource, Count: count, Duration: time.Since(started)}
-}
-
-// syncTeams fetches teams from /v1/api/team with pagination (up to 100 total).
-func syncTeams(c interface {
-	Get(string, map[string]string) (json.RawMessage, error)
-	RateLimit() float64
-}, db *store.Store) syncResult {
-	started := time.Now()
-	resource := "teams"
-
-	if !humanFriendly {
-		fmt.Fprintf(os.Stderr, `{"event":"sync_start","resource":"%s"}`+"\n", resource)
-	}
-
-	var totalCount int
-	const maxTeams = 100
-	const pageSize = 25
-	offset := 0
-
-	for totalCount < maxTeams {
-		params := map[string]string{
-			"limit":  strconv.Itoa(pageSize),
-			"offset": strconv.Itoa(offset),
-			"sort":   "popular",
-		}
-
-		data, err := c.Get("/v1/api/team", params)
-		if err != nil {
-			if totalCount > 0 {
-				break // partial success is fine
-			}
-			return syncResult{Resource: resource, Err: fmt.Errorf("fetching teams: %w", err), Duration: time.Since(started)}
-		}
-
-		var items []map[string]any
-		if err := json.Unmarshal(data, &items); err != nil {
-			var envelope map[string]json.RawMessage
-			if err2 := json.Unmarshal(data, &envelope); err2 == nil {
-				for _, key := range []string{"data", "results", "items", "teams"} {
-					if raw, ok := envelope[key]; ok {
-						if json.Unmarshal(raw, &items) == nil && len(items) > 0 {
-							break
-						}
-					}
-				}
-			}
-			if len(items) == 0 {
-				break
-			}
-		}
-
-		if len(items) == 0 {
-			break
-		}
-
-		for _, item := range items {
-			if err := db.UpsertTeam(item); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: skipping team: %v\n", err)
-				continue
-			}
-			totalCount++
-			if totalCount >= maxTeams {
-				break
-			}
-		}
-
-		if humanFriendly {
-			fmt.Fprintf(os.Stderr, "\r  %s: %d synced", resource, totalCount)
-		}
-
-		if len(items) < pageSize {
-			break
-		}
-		offset += pageSize
-	}
-
-	_ = db.SaveSyncState(resource, "", totalCount)
-
-	if humanFriendly {
-		fmt.Fprintf(os.Stderr, "\r  %s: %d synced (done)\n", resource, totalCount)
-	} else {
-		fmt.Fprintf(os.Stderr, `{"event":"sync_complete","resource":"%s","total":%d,"duration_ms":%d}`+"\n", resource, totalCount, time.Since(started).Milliseconds())
-	}
-
-	return syncResult{Resource: resource, Count: totalCount, Duration: time.Since(started)}
-}
-
-// syncCollections fetches collections per category from the network entities endpoint (up to 50 each).
-func syncCollections(c interface {
-	Get(string, map[string]string) (json.RawMessage, error)
-	RateLimit() float64
-}, db *store.Store) syncResult {
-	started := time.Now()
-	resource := "collections"
-
-	if !humanFriendly {
-		fmt.Fprintf(os.Stderr, `{"event":"sync_start","resource":"%s"}`+"\n", resource)
-	}
-
-	// First get categories from the local store to iterate over
-	categories, err := db.ListCategories()
-	if err != nil || len(categories) == 0 {
-		// If no categories synced yet, do a single uncategorized fetch
-		categories = []map[string]any{{"id": "0", "name": "all"}}
-	}
-
-	var totalCount int
-	const maxPerCategory = 50
-	const pageSize = 25
-	seen := map[string]bool{}
-
-	for _, cat := range categories {
-		catID := fmt.Sprintf("%v", cat["id"])
-		offset := 0
-		catCount := 0
-
-		for catCount < maxPerCategory {
-			params := map[string]string{
-				"entityType": "collection",
-				"limit":      strconv.Itoa(pageSize),
-				"offset":     strconv.Itoa(offset),
-				"sort":       "popular",
-			}
-			if catID != "0" {
-				params["categoryId"] = catID
-			}
-
-			data, err := c.Get("/v1/api/networkentity", params)
-			if err != nil {
-				// Non-fatal per category — log and move on
-				fmt.Fprintf(os.Stderr, "warning: fetching collections for category %s: %v\n", catID, err)
-				break
-			}
-
-			var items []map[string]any
-			if err := json.Unmarshal(data, &items); err != nil {
-				var envelope map[string]json.RawMessage
-				if err2 := json.Unmarshal(data, &envelope); err2 == nil {
-					for _, key := range []string{"data", "results", "items", "entities"} {
-						if raw, ok := envelope[key]; ok {
-							if json.Unmarshal(raw, &items) == nil && len(items) > 0 {
-								break
-							}
-						}
-					}
-				}
-				if len(items) == 0 {
-					break
-				}
-			}
-
-			if len(items) == 0 {
-				break
-			}
-
-			for _, item := range items {
-				id := fmt.Sprintf("%v", item["id"])
-				if id == "" || id == "<nil>" || seen[id] {
-					continue
-				}
-				seen[id] = true
-				if err := db.UpsertCollection(item); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: skipping collection: %v\n", err)
-					continue
-				}
-				totalCount++
-				catCount++
-				if catCount >= maxPerCategory {
-					break
-				}
-			}
-
-			if humanFriendly {
-				fmt.Fprintf(os.Stderr, "\r  %s: %d synced", resource, totalCount)
-			}
-
-			if len(items) < pageSize {
-				break
-			}
-			offset += pageSize
-		}
-	}
-
-	_ = db.SaveSyncState(resource, "", totalCount)
-
-	if humanFriendly {
-		fmt.Fprintf(os.Stderr, "\r  %s: %d synced (done)\n", resource, totalCount)
-	} else {
-		fmt.Fprintf(os.Stderr, `{"event":"sync_complete","resource":"%s","total":%d,"duration_ms":%d}`+"\n", resource, totalCount, time.Since(started).Milliseconds())
-	}
-
-	return syncResult{Resource: resource, Count: totalCount, Duration: time.Since(started)}
 }

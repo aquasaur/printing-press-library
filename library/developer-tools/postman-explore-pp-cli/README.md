@@ -1,4 +1,4 @@
-# postman-explore-pp-cli
+# Postman Explore CLI
 
 Undocumented internal API powering the Postman API Network explore site (postman.com/explore).
 All requests go through a proxy endpoint as POST requests with a JSON body containing
@@ -6,13 +6,9 @@ All requests go through a proxy endpoint as POST requests with a JSON body conta
 
 No authentication required for public browsing and search.
 
+Learn more at [Postman Explore](https://www.postman.com/explore).
+
 ## Install
-
-### Homebrew
-
-```
-brew install trevin-chow/tap/postman-explore-pp-cli
-```
 
 ### Go
 
@@ -26,13 +22,22 @@ Download from [Releases](https://github.com/mvanhorn/printing-press-library/rele
 
 ## Quick Start
 
+### 1. Install
+
+See [Install](#install) above.
+
+### 2. Verify Setup
+
 ```bash
-
-# 1. Verify everything works
 postman-explore-pp-cli doctor
+```
 
-# 3. Start using it
-postman-explore-pp-cli api --help
+This checks your configuration.
+
+### 3. Try Your First Command
+
+```bash
+postman-explore-pp-cli category list
 ```
 
 ## Usage
@@ -41,15 +46,19 @@ postman-explore-pp-cli api --help
 
 ## Commands
 
-### api
+### category
 
-Manage api
+Manage category
 
-- **`postman-explore-pp-cli api get-category`** - Get details for a specific category
-- **`postman-explore-pp-cli api get-network-entity-counts`** - Get total counts of entities on the network
-- **`postman-explore-pp-cli api list-categories`** - List all API categories
-- **`postman-explore-pp-cli api list-network-entities`** - Browse public entities on the API network
-- **`postman-explore-pp-cli api list-teams`** - List publisher teams on the API network
+- **`postman-explore-pp-cli category get`** - Get details for a specific category
+- **`postman-explore-pp-cli category list-categories`** - List all API categories
+
+### networkentity
+
+Manage networkentity
+
+- **`postman-explore-pp-cli networkentity get-network-entity-counts`** - Get total counts of entities on the network
+- **`postman-explore-pp-cli networkentity list-network-entities`** - Browse public entities on the API network
 
 ### search-all
 
@@ -57,24 +66,30 @@ Manage search all
 
 - **`postman-explore-pp-cli search-all search_all`** - Full-text search across the public API network
 
+### team
+
+Publisher teams on the API network
+
+- **`postman-explore-pp-cli team list`** - List publisher teams on the API network
+
 
 ## Output Formats
 
 ```bash
-# Human-readable table (default)
-postman-explore-pp-cli api list
+# Human-readable table (default in terminal, JSON when piped)
+postman-explore-pp-cli category list
 
 # JSON for scripting and agents
-postman-explore-pp-cli api list --json
+postman-explore-pp-cli category list --json
 
-# Filter specific fields
-postman-explore-pp-cli api list --json --select id,name,status
+# Filter to specific fields
+postman-explore-pp-cli category list --json --select id,name,status
 
-# Plain tab-separated for piping
-postman-explore-pp-cli api list --plain
+# Dry run — show the request without sending
+postman-explore-pp-cli category list --dry-run
 
-# Dry run (show request without sending)
-postman-explore-pp-cli api list --dry-run
+# Agent mode — JSON + compact + no prompts in one flag
+postman-explore-pp-cli category list --agent
 ```
 
 ## Agent Usage
@@ -93,6 +108,30 @@ This CLI is designed for AI agent consumption:
 - **Progress events** - paginated commands emit NDJSON events to stderr in default mode
 
 Exit codes: `0` success, `2` usage error, `3` not found, `4` auth error, `5` API error, `7` rate limited, `10` config error.
+
+## Cookbook
+
+Common workflows and recipes:
+
+```bash
+# List resources as JSON for scripting
+postman-explore-pp-cli category list --json
+
+# Filter to specific fields
+postman-explore-pp-cli category list --json --select id,name,status
+
+# Dry run to preview the request
+postman-explore-pp-cli category list --dry-run
+
+# Sync data locally for offline search
+postman-explore-pp-cli sync
+
+# Search synced data
+postman-explore-pp-cli search "query"
+
+# Export for backup
+postman-explore-pp-cli export --format jsonl > backup.jsonl
+```
 
 ## Health Check
 
