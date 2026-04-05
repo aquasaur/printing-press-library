@@ -61,6 +61,8 @@ Checks:
 - Screen Recording permission
 - ffmpeg availability (optional, for video recording)
 - Swift availability (for window enumeration)
+- VHS availability (optional, for terminal recording)
+- Remotion availability (optional, for simulated demo rendering)
 
 ## Commands
 
@@ -79,6 +81,9 @@ Checks:
 | `batch` | Screenshot multiple apps at once |
 | `ocr` | Extract text from a window via Vision framework |
 | `preset` | Save and load capture configurations |
+| `vhs` | Run a VHS tape file for terminal recording |
+| `remotion render` | Render a Remotion composition to video or GIF |
+| `remotion still` | Render a single frame from a Remotion composition |
 | `doctor` | Check permissions and environment |
 | `health` | Machine-readable health check |
 | `permissions` | Permission setup guide |
@@ -136,11 +141,49 @@ agent-capture diff --before before.png --app "MyApp" --output diff.png
 agent-capture batch --apps "Finder,Safari,Terminal" --output screenshots/
 ```
 
+### Terminal Recording with VHS
+
+```bash
+# Run a VHS tape and produce a GIF
+agent-capture vhs demo.tape
+
+# With auto-reduce to hit a size limit
+agent-capture vhs demo.tape output.gif --max-size 5mb
+```
+
+### Simulated Demo with Remotion
+
+```bash
+# Render a Remotion composition as GIF
+agent-capture remotion render --entry src/index.ts --comp MyDemo demo.gif
+
+# Render a still frame for approval before full render
+agent-capture remotion still --entry src/index.ts --comp MyDemo --frame 90 hero.png
+
+# Render with size limit
+agent-capture remotion render --entry src/index.ts --comp MyDemo --max-size 5mb demo.gif
+```
+
+### Evidence Bundles by Tier
+
+```bash
+# Screen capture (default)
+agent-capture evidence --app "MyApp" --screenshots 3 --record 5 --output evidence/
+
+# Terminal recording
+agent-capture evidence --tier vhs --tape demo.tape --output evidence/
+
+# Simulated demo
+agent-capture evidence --tier remotion --entry src/index.ts --comp Demo --output evidence/
+```
+
 ## Requirements
 
 - macOS 12.3+ (ScreenCaptureKit)
 - Xcode Command Line Tools (`xcode-select --install`)
 - ffmpeg (optional, for video recording): `brew install ffmpeg`
+- VHS (optional, for terminal recording): `brew install vhs`
+- Remotion (optional, for simulated demos): `npm install remotion @remotion/cli`
 
 ## Acknowledgments
 
