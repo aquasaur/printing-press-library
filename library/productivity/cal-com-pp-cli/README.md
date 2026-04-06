@@ -62,6 +62,9 @@ These capabilities aren't available in any other Cal.com tool.
 - **`stats`** — Track booking volume, busiest hours, and cancellation rates over time
 - **`noshow`** — Identify which event types and time slots have the highest no-show rates
 - **`search`** — Instant full-text search across all bookings, even offline
+- **`gaps`** — Find unbooked availability windows to optimize your schedule
+- **`workload`** — See booking distribution across team members to tune round-robin weights
+- **`stale`** — Find event types with no recent bookings to clean up unused scheduling pages
 
 ## Commands
 
