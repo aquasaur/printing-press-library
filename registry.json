@@ -66,7 +66,7 @@
         "binary": "pagliacci-pizza-pp-mcp",
         "transport": "stdio",
         "tool_count": 41,
-        "public_tool_count": 7,
+        "public_tool_count": 10,
         "auth_type": "composed",
         "env_vars": [],
         "mcp_ready": "partial"

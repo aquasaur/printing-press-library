@@ -261,7 +261,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("time-window-days_get",
-			mcplib.WithDescription("Get available days for service"),
+			mcplib.WithDescription("[No auth] Get available days for service"),
 			mcplib.WithString("storeId", mcplib.Required(), mcplib.Description("Store ID")),
 			mcplib.WithString("serviceType", mcplib.Description("Service type: PICK for pickup, DEL for delivery")),
 		),
@@ -269,7 +269,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("time-windows_get-by-date",
-			mcplib.WithDescription("Get time slots for a specific day"),
+			mcplib.WithDescription("[No auth] Get time slots for a specific day"),
 			mcplib.WithString("storeId", mcplib.Required(), mcplib.Description("Store ID")),
 			mcplib.WithString("serviceType", mcplib.Description("Service type: PICK for pickup, DEL for delivery")),
 			mcplib.WithString("date", mcplib.Required(), mcplib.Description("Date in YYYYMMDD format")),
@@ -278,7 +278,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("time-windows_get-today",
-			mcplib.WithDescription("Get today's time slots"),
+			mcplib.WithDescription("[No auth] Get today's time slots"),
 			mcplib.WithString("storeId", mcplib.Required(), mcplib.Description("Store ID")),
 			mcplib.WithString("serviceType", mcplib.Description("Service type: PICK for pickup, DEL for delivery")),
 		),

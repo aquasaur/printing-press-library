@@ -28,7 +28,7 @@ The printing press generates both CLIs and MCP servers from the same spec. CLIs 
 
 | CLI | MCP | API | Tools | What it does |
 |-----|-----|-----|-------|-------------|
-| **[pagliacci-pizza-pp-cli](library/other/pagliacci-pizza-pp-cli/)** | pagliacci-pizza-pp-mcp | Pagliacci Pizza | 41 (7 public) | Order pizza, browse menus, manage rewards. 7 tools (stores, menus, pricing) work without login. |
+| **[pagliacci-pizza-pp-cli](library/other/pagliacci-pizza-pp-cli/)** | pagliacci-pizza-pp-mcp | Pagliacci Pizza | 41 (10 public) | Order pizza, browse menus, manage rewards. 10 tools (stores, menus, pricing, scheduling) work without login. |
 
 ### CLI only (no MCP server)
 
