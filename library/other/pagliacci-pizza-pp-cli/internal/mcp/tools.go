@@ -98,20 +98,20 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("menu-cache_get",
-			mcplib.WithDescription("Get full cached menu"),
+			mcplib.WithDescription("[No auth] Get full cached menu"),
 			mcplib.WithString("storeId", mcplib.Required(), mcplib.Description("Store ID")),
 		),
 		makeAPIHandler("GET", "/MenuCache/{storeId}", []string{"storeId", }),
 	)
 	s.AddTool(
 		mcplib.NewTool("menu-slices_list",
-			mcplib.WithDescription("List available pizza slices"),
+			mcplib.WithDescription("[No auth] List available pizza slices"),
 		),
 		makeAPIHandler("GET", "/MenuSlices", []string{ }),
 	)
 	s.AddTool(
 		mcplib.NewTool("menu-top_get",
-			mcplib.WithDescription("Get featured menu items"),
+			mcplib.WithDescription("[No auth] Get featured menu items"),
 			mcplib.WithString("storeId", mcplib.Required(), mcplib.Description("Store ID")),
 		),
 		makeAPIHandler("GET", "/MenuTop/{storeId}", []string{"storeId", }),
@@ -206,14 +206,14 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("quote-store_get",
-			mcplib.WithDescription("Get store-specific pricing"),
+			mcplib.WithDescription("[No auth] Get store-specific pricing"),
 			mcplib.WithString("storeId", mcplib.Required(), mcplib.Description("Store ID")),
 		),
 		makeAPIHandler("GET", "/QuoteStore/{storeId}", []string{"storeId", }),
 	)
 	s.AddTool(
 		mcplib.NewTool("quote-store_list",
-			mcplib.WithDescription("List store availability and pricing"),
+			mcplib.WithDescription("[No auth] List store availability and pricing"),
 		),
 		makeAPIHandler("GET", "/QuoteStore", []string{ }),
 	)
@@ -237,7 +237,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("store_list",
-			mcplib.WithDescription("List all Pagliacci Pizza stores"),
+			mcplib.WithDescription("[No auth] List all Pagliacci Pizza stores"),
 		),
 		makeAPIHandler("GET", "/Store", []string{ }),
 	)
@@ -292,7 +292,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("version_get",
-			mcplib.WithDescription("Get API version"),
+			mcplib.WithDescription("[No auth] Get API version"),
 		),
 		makeAPIHandler("GET", "/Version", []string{ }),
 	)
