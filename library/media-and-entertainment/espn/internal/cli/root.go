@@ -116,6 +116,7 @@ func Execute() error {
 	rootCmd.AddCommand(newWatchCmd(&flags))
 	rootCmd.AddCommand(newStreakCmd(&flags))
 	rootCmd.AddCommand(newRivalsCmd(&flags))
+	rootCmd.AddCommand(newBoxScoreCmd(&flags))
 	rootCmd.AddCommand(newVersionCliCmd())
 
 	err := rootCmd.Execute()
