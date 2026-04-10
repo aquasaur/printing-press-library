@@ -20,9 +20,18 @@ The printing press generates both CLIs and MCP servers from the same spec. CLIs 
 | CLI | MCP | API | Tools | What it does |
 |-----|-----|-----|-------|-------------|
 | **[dub-pp-cli](library/marketing/dub/)** | dub-pp-mcp | Dub | 53 | Create short links, track analytics, manage domains, and run affiliate programs. |
+| **[hubspot-pp-cli](library/sales-and-crm/hubspot/)** | hubspot-pp-mcp | HubSpot | 50+ | CRM contacts, companies, deals, tickets, engagements, pipelines, and associations with offline search and pipeline analytics. |
 | **[linear-pp-cli](library/project-management/linear/)** | linear-pp-mcp | Linear | 63 | Issues, cycles, teams, projects via GraphQL. Local sync, stale detection, team health scoring. |
+| **[slack-pp-cli](library/productivity/slack/)** | slack-pp-mcp | Slack | 50+ | Send messages, search conversations, monitor channels, manage workspace. 8 transcendence analytics commands. |
 | **[steam-web-pp-cli](library/media-and-entertainment/steam-web/)** | steam-web-pp-mcp | Steam Web | 164 (29 public) | Look up Steam players, games, achievements, friends, and stats. 29 tools work without an API key. |
+| **[trigger-dev-pp-cli](library/developer-tools/trigger-dev/)** | trigger-dev-pp-mcp | Trigger.dev | 40+ | Monitor runs, trigger tasks, manage schedules, and detect failures. Real-time failure watch with desktop notifications. |
 | **[cal-com-pp-cli](library/productivity/cal-com/)** | cal-com-pp-mcp | Cal.com | 288 | Manage bookings, event types, schedules, and availability. |
+
+### Browser login required
+
+| CLI | MCP | API | Tools | What it does |
+|-----|-----|-----|-------|-------------|
+| **[dominos-pp-cli](library/commerce/dominos-pp-cli/)** | dominos-mcp | Domino's Pizza | 25+ | Order pizza, browse menus, track deliveries, manage rewards. Offline menu search, saved order templates, deal optimization. |
 
 ### Partial MCP (some tools work without auth)
 
@@ -60,6 +69,18 @@ go install github.com/mvanhorn/printing-press-library/library/media-and-entertai
 
 # Postman Explore — API network browser (no auth)
 go install github.com/mvanhorn/printing-press-library/library/developer-tools/postman-explore/cmd/postman-explore-pp-cli@latest
+
+# HubSpot — CRM (set HUBSPOT_ACCESS_TOKEN env var)
+go install github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot/cmd/hubspot-pp-cli@latest
+
+# Slack — workspace messaging (set SLACK_BOT_TOKEN env var)
+go install github.com/mvanhorn/printing-press-library/library/productivity/slack/cmd/slack-pp-cli@latest
+
+# Trigger.dev — background jobs (set TRIGGER_SECRET_KEY env var)
+go install github.com/mvanhorn/printing-press-library/library/developer-tools/trigger-dev/cmd/trigger-dev-pp-cli@latest
+
+# Domino's Pizza — pizza ordering (browser login)
+go install github.com/mvanhorn/printing-press-library/library/commerce/dominos-pp-cli/cmd/dominos-pp-cli@latest
 
 # Pagliacci Pizza — pizza ordering (browser login for full access)
 go install github.com/mvanhorn/printing-press-library/library/other/pagliacci-pizza/cmd/pagliacci-pizza-pp-cli@latest
