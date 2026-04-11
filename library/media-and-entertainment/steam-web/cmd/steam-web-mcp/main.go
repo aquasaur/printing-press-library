@@ -13,7 +13,7 @@ import (
 
 func main() {
 	s := server.NewMCPServer(
-		"steam-web-pp-mcp",
+		"steam-web-mcp",
 		"1.0.0",
 		server.WithToolCapabilities(false),
 	)
