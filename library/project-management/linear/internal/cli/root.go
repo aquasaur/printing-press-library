@@ -10,12 +10,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/mvanhorn/printing-press-library/library/project-management/linear/internal/client"
 	"github.com/mvanhorn/printing-press-library/library/project-management/linear/internal/config"
+	"github.com/spf13/cobra"
 )
 
-var version = "0.1.0"
+var version = "1.0.0"
 
 type rootFlags struct {
 	asJSON       bool

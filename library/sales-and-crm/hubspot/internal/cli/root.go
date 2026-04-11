@@ -10,12 +10,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot-pp-cli/internal/client"
 	"github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot-pp-cli/internal/config"
+	"github.com/spf13/cobra"
 )
 
-var version = "3.0.0"
+var version = "3.1.0"
 
 type rootFlags struct {
 	asJSON       bool

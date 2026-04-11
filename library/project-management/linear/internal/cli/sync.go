@@ -15,6 +15,7 @@ import (
 func newSyncCmd(flags *rootFlags) *cobra.Command {
 	var full bool
 	var dbPath string
+	var maxPages int
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Sync Linear data to local SQLite store",
@@ -47,7 +48,7 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 
 			syncs := []struct {
 				name string
-				fn   func(*client.Client, *store.Store) (int, error)
+				fn   func(*client.Client, *store.Store, int) (int, error)
 			}{
 				{"teams", syncTeams},
 				{"users", syncUsers},
@@ -60,7 +61,7 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 
 			for _, s := range syncs {
 				fmt.Fprintf(os.Stderr, "Syncing %s... ", s.name)
-				n, err := s.fn(c, db)
+				n, err := s.fn(c, db, maxPages)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 					continue
@@ -75,10 +76,11 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&full, "full", false, "Full sync (ignore cursors, re-fetch everything)")
 	cmd.Flags().StringVar(&dbPath, "db", "", "Database path (default: ~/.local/share/linear-pp-cli/store.db)")
+	cmd.Flags().IntVar(&maxPages, "max-pages", 10, "Maximum pages to fetch per resource (0 = unlimited)")
 	return cmd
 }
 
-func syncTeams(c *client.Client, db *store.Store) (int, error) {
+func syncTeams(c *client.Client, db *store.Store, _ int) (int, error) {
 	data, err := c.Query(client.TeamsQuery, nil)
 	if err != nil {
 		return 0, err
@@ -103,7 +105,7 @@ func syncTeams(c *client.Client, db *store.Store) (int, error) {
 	return len(result.Teams.Nodes), nil
 }
 
-func syncUsers(c *client.Client, db *store.Store) (int, error) {
+func syncUsers(c *client.Client, db *store.Store, _ int) (int, error) {
 	data, err := c.Query(client.UsersQuery, map[string]any{"first": 200})
 	if err != nil {
 		return 0, err
@@ -128,7 +130,7 @@ func syncUsers(c *client.Client, db *store.Store) (int, error) {
 	return len(result.Users.Nodes), nil
 }
 
-func syncWorkflowStates(c *client.Client, db *store.Store) (int, error) {
+func syncWorkflowStates(c *client.Client, db *store.Store, _ int) (int, error) {
 	data, err := c.Query(client.WorkflowStatesQuery, nil)
 	if err != nil {
 		return 0, err
@@ -153,8 +155,8 @@ func syncWorkflowStates(c *client.Client, db *store.Store) (int, error) {
 	return len(result.WorkflowStates.Nodes), nil
 }
 
-func syncLabels(c *client.Client, db *store.Store) (int, error) {
-	nodes, err := c.PaginatedQuery(client.IssueLabelsQuery, map[string]any{"first": 100}, "issueLabels", 100)
+func syncLabels(c *client.Client, db *store.Store, maxPages int) (int, error) {
+	nodes, err := c.PaginatedQueryMax(client.IssueLabelsQuery, map[string]any{"first": 100}, "issueLabels", 100, maxPages)
 	if err != nil {
 		return 0, err
 	}
@@ -170,8 +172,8 @@ func syncLabels(c *client.Client, db *store.Store) (int, error) {
 	return len(nodes), nil
 }
 
-func syncProjects(c *client.Client, db *store.Store) (int, error) {
-	nodes, err := c.PaginatedQuery(client.ProjectsQuery, nil, "projects", 50)
+func syncProjects(c *client.Client, db *store.Store, maxPages int) (int, error) {
+	nodes, err := c.PaginatedQueryMax(client.ProjectsQuery, nil, "projects", 50, maxPages)
 	if err != nil {
 		return 0, err
 	}
@@ -187,8 +189,8 @@ func syncProjects(c *client.Client, db *store.Store) (int, error) {
 	return len(nodes), nil
 }
 
-func syncCycles(c *client.Client, db *store.Store) (int, error) {
-	nodes, err := c.PaginatedQuery(client.CyclesQuery, nil, "cycles", 50)
+func syncCycles(c *client.Client, db *store.Store, maxPages int) (int, error) {
+	nodes, err := c.PaginatedQueryMax(client.CyclesQuery, nil, "cycles", 50, maxPages)
 	if err != nil {
 		return 0, err
 	}
@@ -204,8 +206,8 @@ func syncCycles(c *client.Client, db *store.Store) (int, error) {
 	return len(nodes), nil
 }
 
-func syncIssues(c *client.Client, db *store.Store) (int, error) {
-	nodes, err := c.PaginatedQuery(client.IssuesQuery, nil, "issues", 50)
+func syncIssues(c *client.Client, db *store.Store, maxPages int) (int, error) {
+	nodes, err := c.PaginatedQueryMax(client.IssuesQuery, nil, "issues", 50, maxPages)
 	if err != nil {
 		return 0, err
 	}

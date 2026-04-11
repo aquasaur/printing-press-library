@@ -67,6 +67,11 @@ func (c *Client) Mutate(query string, variables map[string]any) (json.RawMessage
 // queryFn returns the query string with $after variable; fieldPath is the dot-path to the connection
 // (e.g., "issues"). Returns all collected nodes.
 func (c *Client) PaginatedQuery(query string, variables map[string]any, fieldPath string, pageSize int) ([]json.RawMessage, error) {
+	return c.PaginatedQueryMax(query, variables, fieldPath, pageSize, 0)
+}
+
+// PaginatedQueryMax is like PaginatedQuery but stops after maxPages pages (0 = unlimited).
+func (c *Client) PaginatedQueryMax(query string, variables map[string]any, fieldPath string, pageSize int, maxPages int) ([]json.RawMessage, error) {
 	if variables == nil {
 		variables = map[string]any{}
 	}
@@ -77,6 +82,7 @@ func (c *Client) PaginatedQuery(query string, variables map[string]any, fieldPat
 
 	var all []json.RawMessage
 	hasNext := true
+	pagesFetched := 0
 	for hasNext {
 		data, err := c.Query(query, variables)
 		if err != nil {
@@ -107,6 +113,10 @@ func (c *Client) PaginatedQuery(query string, variables map[string]any, fieldPat
 
 		all = append(all, conn.Nodes...)
 		hasNext = conn.PageInfo.HasNextPage
+		pagesFetched++
+		if maxPages > 0 && pagesFetched >= maxPages {
+			break
+		}
 		if hasNext {
 			variables["after"] = conn.PageInfo.EndCursor
 		}

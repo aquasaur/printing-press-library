@@ -98,7 +98,7 @@ func (a *AppContext) RequireSession() error {
 func (a *AppContext) stderr() *os.File { return os.Stderr }
 
 // Version is set at build time via -ldflags or defaults to "dev".
-var Version = "0.1.0"
+var Version = "1.0.0"
 
 func Root() *cobra.Command {
 	root := &cobra.Command{
