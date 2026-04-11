@@ -100,6 +100,13 @@
       }
     },
     {
+      "name": "instacart",
+      "category": "commerce",
+      "api": "Instacart",
+      "description": "Natural-language Instacart CLI that talks directly to the web GraphQL API. Add items to your cart, search products, and manage carts across retailers without browser automation.",
+      "path": "library/commerce/instacart"
+    },
+    {
       "name": "kalshi",
       "category": "payments",
       "api": "Kalshi",
