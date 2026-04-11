@@ -91,6 +91,7 @@ func resolveRead(c *client.Client, flags *rootFlags, resourceType string, isList
 		if slackErr := checkSlackAPIError(data); slackErr != nil {
 			return nil, DataProvenance{}, slackErr
 		}
+		writeThroughCache(resourceType, data)
 		return data, DataProvenance{Source: "live"}, nil
 
 	default: // "auto"
@@ -99,6 +100,7 @@ func resolveRead(c *client.Client, flags *rootFlags, resourceType string, isList
 			if slackErr := checkSlackAPIError(data); slackErr != nil {
 				return nil, DataProvenance{}, slackErr
 			}
+			writeThroughCache(resourceType, data)
 			return data, DataProvenance{Source: "live"}, nil
 		}
 		if !isNetworkError(err) {
@@ -126,11 +128,13 @@ func resolvePaginatedRead(c *client.Client, flags *rootFlags, resourceType strin
 		if err != nil {
 			return nil, DataProvenance{}, err
 		}
+		writeThroughCache(resourceType, data)
 		return data, DataProvenance{Source: "live"}, nil
 
 	default: // "auto"
 		data, err := paginatedGet(c, path, params, fetchAll, cursorParam, nextCursorPath, hasMoreField)
 		if err == nil {
+			writeThroughCache(resourceType, data)
 			return data, DataProvenance{Source: "live"}, nil
 		}
 		if !isNetworkError(err) {
@@ -141,6 +145,45 @@ func resolvePaginatedRead(c *client.Client, flags *rootFlags, resourceType strin
 			return nil, DataProvenance{}, fmt.Errorf("API unreachable and no local data. Run 'slack-pp-cli sync' to enable offline access.\n\nOriginal error: %w", err)
 		}
 		return localData, prov, nil
+	}
+}
+
+func writeThroughCache(resourceType string, data json.RawMessage) {
+	db, err := store.Open(defaultDBPath("slack-pp-cli"))
+	if err != nil {
+		return
+	}
+	defer db.Close()
+	var items []json.RawMessage
+	if json.Unmarshal(data, &items) != nil || len(items) == 0 {
+		items = nil
+		var envelope map[string]json.RawMessage
+		if json.Unmarshal(data, &envelope) == nil {
+			for _, key := range []string{"results", "data", "items", "messages", "channels", "members"} {
+				if raw, ok := envelope[key]; ok {
+					var arr []json.RawMessage
+					if json.Unmarshal(raw, &arr) == nil && len(arr) > 0 {
+						items = arr
+						break
+					}
+				}
+			}
+			if items == nil {
+				if idRaw, ok := envelope["id"]; ok {
+					_ = db.Upsert(resourceType, strings.Trim(string(idRaw), "\""), data)
+					return
+				}
+			}
+		}
+	}
+	for _, item := range items {
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(item, &obj) != nil {
+			continue
+		}
+		if idRaw, ok := obj["id"]; ok {
+			_ = db.Upsert(resourceType, strings.Trim(string(idRaw), "\""), item)
+		}
 	}
 }
 

@@ -10,12 +10,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/mvanhorn/printing-press-library/library/productivity/slack/internal/client"
 	"github.com/mvanhorn/printing-press-library/library/productivity/slack/internal/config"
+	"github.com/spf13/cobra"
 )
 
-var version = "1.0.0"
+var version = "1.1.0"
 
 type rootFlags struct {
 	asJSON       bool

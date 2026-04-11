@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/mvanhorn/printing-press-library/library/productivity/slack/internal/store"
+	"github.com/spf13/cobra"
 )
 
 // syncResult holds the outcome of syncing a single resource.
@@ -32,6 +32,7 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 	var since string
 	var concurrency int
 	var dbPath string
+	var maxPages int
 
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -117,7 +118,7 @@ Once synced, use the 'search' command for instant full-text search.`,
 				go func() {
 					defer wg.Done()
 					for resource := range work {
-						res := syncResource(c, db, resource, sinceTS, full)
+						res := syncResource(c, db, resource, sinceTS, full, maxPages)
 						results <- res
 					}
 				}()
@@ -151,7 +152,7 @@ Once synced, use the 'search' command for instant full-text search.`,
 				}
 			}
 			if syncMessages {
-				res := syncResource(c, db, "messages", sinceTS, full)
+				res := syncResource(c, db, "messages", sinceTS, full, maxPages)
 				if res.Err != nil {
 					if humanFriendly {
 						fmt.Fprintf(os.Stderr, "  %s: error: %v\n", res.Resource, res.Err)
@@ -181,6 +182,7 @@ Once synced, use the 'search' command for instant full-text search.`,
 	cmd.Flags().StringVar(&since, "since", "", "Incremental sync duration (e.g. 7d, 24h, 1w, 30m)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Number of parallel sync workers")
 	cmd.Flags().StringVar(&dbPath, "db", "", "Database path (default: ~/.local/share/slack-pp-cli/data.db)")
+	cmd.Flags().IntVar(&maxPages, "max-pages", 10, "Maximum pages to fetch per resource (0 = unlimited)")
 
 	return cmd
 }
@@ -190,7 +192,7 @@ Once synced, use the 'search' command for instant full-text search.`,
 func syncResource(c interface {
 	Get(string, map[string]string) (json.RawMessage, error)
 	RateLimit() float64
-}, db *store.Store, resource, sinceTS string, full bool) syncResult {
+}, db *store.Store, resource, sinceTS string, full bool, maxPages int) syncResult {
 	started := time.Now()
 
 	if !humanFriendly {
@@ -219,6 +221,7 @@ func syncResource(c interface {
 	pageSize := determinePaginationDefaults()
 
 	var progressCount int64
+	pagesFetched := 0
 
 	for {
 		params := map[string]string{}
@@ -291,6 +294,14 @@ func syncResource(c interface {
 		if err := db.SaveSyncState(resource, nextCursor, totalCount); err != nil {
 			// Non-fatal: log and continue
 			fmt.Fprintf(os.Stderr, "\nwarning: failed to save sync state for %s: %v\n", resource, err)
+		}
+
+		pagesFetched++
+		if maxPages > 0 && pagesFetched >= maxPages {
+			if humanFriendly {
+				fmt.Fprintf(os.Stderr, "\n  %s: reached --max-pages limit (%d pages, %d items)\n", resource, maxPages, totalCount)
+			}
+			break
 		}
 
 		// Determine if there are more pages
