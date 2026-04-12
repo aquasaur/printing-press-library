@@ -120,7 +120,7 @@
       "name": "hackernews",
       "category": "media-and-entertainment",
       "api": "Hacker News",
-      "description": "Browse, search, and analyze Hacker News \u2014 front page, Show HN, Ask HN, Who is Hiring, topic pulse, and pipe-friendly output",
+      "description": "Browse, search, and analyze Hacker News — front page, Show HN, Ask HN, Who is Hiring, topic pulse, and pipe-friendly output",
       "path": "library/media-and-entertainment/hackernews",
       "mcp": {
         "binary": "hackernews-pp-mcp",
@@ -321,6 +321,25 @@
         "auth_type": "none",
         "mcp_ready": "full",
         "spec_format": "internal"
+      }
+    },
+    {
+      "name": "yahoo-finance",
+      "category": "commerce",
+      "api": "Yahoo Finance",
+      "description": "Quotes, charts, fundamentals, options chains, and a local portfolio/watchlist tracker against Yahoo Finance — no API key, with Chrome-session fallback for rate-limited IPs",
+      "path": "library/commerce/yahoo-finance",
+      "mcp": {
+        "binary": "yahoo-finance-pp-mcp",
+        "transport": "stdio",
+        "tool_count": 11,
+        "public_tool_count": 0,
+        "auth_type": "none",
+        "env_vars": [],
+        "mcp_ready": "full",
+        "manifest_checksum": "",
+        "spec_format": "internal",
+        "manifest_url": ""
       }
     }
   ]
