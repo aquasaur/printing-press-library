@@ -137,10 +137,10 @@ Three slices of the same week's data: geographic, device, and campaign-tagged. C
 ### Partner program month-end
 
 ```bash
-dub-pp-cli commissions --period 30d --agent          # what's owed to whom
-dub-pp-cli payouts --period 30d --dry-run --agent    # preview
-dub-pp-cli payouts --period 30d --yes --agent        # execute
-dub-pp-cli partners leaderboard --period 30d --agent # ranking
+dub-pp-cli commissions --interval 30d --agent          # what's owed to whom
+dub-pp-cli payouts --interval 30d --dry-run --agent    # preview
+dub-pp-cli payouts --interval 30d --yes --agent        # execute
+dub-pp-cli partners leaderboard --interval 30d --agent # ranking
 ```
 
 Always preview with `--dry-run` before running payouts. The leaderboard call at the end gives context for the next month's partner outreach.

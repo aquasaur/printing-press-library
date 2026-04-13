@@ -89,26 +89,33 @@ Local store + utility:
 
 ```bash
 hubspot-pp-cli deals stale --days 14 --agent           # neglected deals
-hubspot-pp-cli deals velocity --period 30d --agent     # stage-level timing
-hubspot-pp-cli deals coverage --quota 500000 --agent   # vs quota
+hubspot-pp-cli deals velocity --weeks 8 --agent        # stage-level timing over 8 weeks
+hubspot-pp-cli deals coverage --pipeline <PIPELINE_ID> --limit 50 --agent
 ```
 
-Stale deals to nudge, velocity to spot funnel leaks, coverage to see if pipeline is healthy against the target.
+`deals stale` surfaces deals untouched for N days. `deals velocity` computes per-stage dwell times over the last N weeks. `deals coverage` lists deals in the pipeline; compare the total value against your quota externally.
 
 ### Find a contact and log a call
 
 ```bash
-hubspot-pp-cli contacts search --filter "email:alice@acme.com" --agent
-CONTACT_ID=$(hubspot-pp-cli contacts search --filter "email:alice@acme.com" --agent | jq -r '.results[0].id')
-hubspot-pp-cli calls create --contact-id "$CONTACT_ID" --duration 20m --notes "Discussed pricing, sending proposal by Thursday" --agent
+hubspot-pp-cli contacts search --query "alice@acme.com" --agent
+CONTACT_ID=$(hubspot-pp-cli contacts search --query "alice@acme.com" --agent | jq -r '.results[0].id')
+hubspot-pp-cli calls create \
+  --hs-call-title "Pricing discussion" \
+  --hs-call-body "Discussed pricing, sending proposal by Thursday" \
+  --hs-call-duration 1200000 --hs-call-direction OUTBOUND \
+  --hs-timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --agent
+# Then associate the call to the contact:
+hubspot-pp-cli associations calls "$CALL_ID" contacts "$CONTACT_ID" --agent
 ```
 
-Search returns the contact; pipe through jq to extract ID; `calls create` logs the engagement with automatic association.
+Note: duration is milliseconds; associations are explicit via the `associations` command (there is no direct contact-id flag on `calls create`).
 
 ### What does Acme look like in our CRM?
 
 ```bash
-COMPANY=$(hubspot-pp-cli companies search --filter "name:Acme" --agent | jq -r '.results[0].id')
+COMPANY=$(hubspot-pp-cli companies search --query "Acme" --agent | jq -r '.results[0].id')
 hubspot-pp-cli companies get "$COMPANY" --agent
 hubspot-pp-cli associations companies "$COMPANY" contacts --agent   # people at Acme
 hubspot-pp-cli associations companies "$COMPANY" deals --agent      # deals with Acme
@@ -138,7 +145,7 @@ Grant the private app the scopes you need (typically: `crm.objects.contacts.*`, 
 
 ## Agent Mode
 
-Add `--agent` to any command. Expands to `--json --compact --no-input --no-color --yes`. Useful flags: `--select`, `--dry-run`, `--rate-limit N` (HubSpot is aggressive on rate limits; throttle for bulk ops), `--filter <expr>` for structured filtering.
+Add `--agent` to any command. Expands to `--json --compact --no-input --no-color --yes`. Useful flags: `--select`, `--dry-run`, `--rate-limit N` (HubSpot is aggressive on rate limits; throttle for bulk ops), `--query <expr>` for search commands.
 
 ## Exit Codes
 
@@ -175,7 +182,7 @@ Given `$ARGUMENTS`:
 
 1. **Empty, `help`, or `--help`** → run `hubspot-pp-cli --help`
 2. **`install`** → CLI; **`install mcp`** → MCP
-3. **"find contact / company / deal"** → `<object> search --filter <expr> --agent`
+3. **"find contact / company / deal"** → `<object> search --query <expr> --agent`
 4. **"pipeline health"** → `deals velocity | stale | coverage`
-5. **"log call / task / note"** → `<engagement> create --contact-id ... --agent`
+5. **"log call / task / note"** → `<engagement> create --hs-call-title/--hs-call-body/--hs-call-duration ... --agent`, then `associations <engagementType> <id> contacts <contactId>` to link
 6. **Anything else** → check install + auth, route by CRM object verb, run with `--agent`.

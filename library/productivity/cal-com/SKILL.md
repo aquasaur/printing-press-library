@@ -95,16 +95,16 @@ cal-com-pp-cli conflicts --agent  # catch overlapping slots
 
 ```bash
 cal-com-pp-cli workload --period 7d --agent
-cal-com-pp-cli gaps --period 7d --min-duration 60m --agent
+cal-com-pp-cli gaps --days 7 --min-gap 60 --agent
 ```
 
-Workload shows total booked hours per day; `gaps` with a 60-minute floor surfaces open blocks that could fit deep work.
+Workload shows total booked hours per day; `gaps` with a 60-minute floor surfaces open blocks that could fit deep work. (Workload uses `--period` as a free-form window; gaps uses `--days` for the lookahead and `--min-gap` in minutes.)
 
 ### Post-month analytics for event-type tuning
 
 ```bash
-cal-com-pp-cli stats --period 30d --group-by event-type --agent
-cal-com-pp-cli noshow --period 30d --agent
+cal-com-pp-cli stats --period 30d --agent
+cal-com-pp-cli noshow --agent
 cal-com-pp-cli stale --days 60 --agent
 ```
 

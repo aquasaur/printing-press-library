@@ -40,7 +40,7 @@ Commands that combine TMDb + OMDb data or derive from streaming/watch-taste data
 
 ### Structured discovery
 
-- **`discover [--genre <g>] [--year <y>] [--min-rating N] [--provider <p>]`** — Browse with structured filters. Much richer than search: combine genre, year range, rating floor, cast, and streaming provider in one query.
+- **`discover [--with-genres <ids>] [--year <y>] [--vote-average-gte N] [--with-watch-providers <ids>]`** — Browse with structured filters. Combine genre IDs, year, rating floor, cast, and streaming provider IDs (e.g. `8`=Netflix, `337`=Disney+) in one query. Use `movies genres` to look up genre IDs.
 
 - **`marathon <franchise>`** — Plan a franchise marathon with chronological or release order, total runtime, and where-to-stream for each title.
 
@@ -120,10 +120,10 @@ Returns: TMDb score, IMDB, Metacritic, RT scores for each; box office; shared ca
 
 ```bash
 movie-goat-pp-cli marathon "Lord of the Rings" --agent
-movie-goat-pp-cli marathon "Alien" --order chronological --agent
+movie-goat-pp-cli marathon "Alien" --agent
 ```
 
-Returns titles in watch order, runtime per film, total weekend duration, and streaming mix so you know if one movie's only on a provider you don't have.
+Pass a TMDb collection name; returns titles in watch order, runtime per film, total weekend duration, and streaming mix so you know if one movie's only on a provider you don't have. Watch order follows TMDb's collection sequence.
 
 ### Research a director's full career
 
@@ -136,10 +136,16 @@ Complete filmography, decades active, genres, average rating, highlights. Used a
 ### Discover-by-filter
 
 ```bash
-movie-goat-pp-cli discover --genre scifi --year 2000-2010 --min-rating 7.5 --provider netflix --agent
+movie-goat-pp-cli movies genres --agent                           # look up genre IDs first
+# 878 = sci-fi, 8 = Netflix provider ID
+movie-goat-pp-cli discover \
+  --with-genres 878 --primary-release-year 2005 \
+  --vote-average-gte 7.5 \
+  --with-watch-providers 8 --watch-region US \
+  --agent
 ```
 
-Structured search beats search-by-title when the question is "what 2000s sci-fi with 7.5+ rating is on Netflix."
+TMDb's discover endpoint uses numeric IDs for genres and providers — look them up first via `movies genres`. Structured search beats search-by-title when the question is "what 2000s sci-fi with 7.5+ rating is on Netflix."
 
 ## Auth Setup
 

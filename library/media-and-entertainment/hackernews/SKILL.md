@@ -42,7 +42,7 @@ These commands aren't available in any other HN tool.
 
 ### Hiring intelligence
 
-- **`hiring [--remote] [--pattern <regex>] [--salary]`** — Smart "Who is Hiring?" filtering. Not a naive grep — parses the actual job post patterns (tech stack, remote, salary, location).
+- **`hiring [regex] [--remote] [--tech] [--salary]`** — Smart "Who is Hiring?" filtering. Accepts a regex as a positional argument for keyword matching (e.g., `hiring "rust"`), then apply boolean filters for remote / tech stack / salary info. Much richer than naive grep.
 
 - **`hiring-stats [--months N]`** — Aggregate hiring data across months: most requested languages, remote percentage, salary ranges, trends over time.
 
@@ -109,7 +109,7 @@ hackernews-pp-cli by-date "AI agents" --tags story --agent | jq '.hits[0:5]'
 ### Hiring market intel for remote Rust
 
 ```bash
-hackernews-pp-cli hiring --pattern "rust" --remote --agent
+hackernews-pp-cli hiring "rust" --remote --tech --agent
 hackernews-pp-cli hiring-stats --months 6 --agent
 ```
 

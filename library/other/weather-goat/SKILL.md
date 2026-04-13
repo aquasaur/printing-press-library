@@ -135,7 +135,7 @@ Optional config:
 
 ## Agent Mode
 
-Add `--agent` to any command. Expands to `--json --compact --no-input --no-color --yes`. Use `--days N` for forecast range on relevant commands, `--units metric|imperial`, `--no-cache` to bypass the 15-minute GET cache.
+Add `--agent` to any command. Expands to `--json --compact --no-input --no-color --yes`. Use `--days N` for forecast range on relevant commands, `--no-cache` to bypass the 15-minute GET cache.
 
 ## Exit Codes
 

@@ -147,7 +147,7 @@ Optional:
 Add `--agent` to any command. Expands to `--json --compact --no-input --no-color --yes`. Useful flags:
 
 - `--stops non_stop | one_stop | two_plus` — filter results
-- `--cabin economy | premium | business | first` — cabin class
+- `--class economy | premium_economy | business | first` (short: `-c`) — cabin class
 - `--sort price | duration | stops` — result ordering
 - `--min-hours N` — minimum duration (for `longhaul`)
 - `--country <CC>` — country filter (for `explore`)
