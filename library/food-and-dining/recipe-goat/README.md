@@ -70,7 +70,7 @@ These capabilities aren't available in any other tool for this API.
 
 ### Cross-site intelligence
 
-- **`goat`** — Query any dish across 15 trusted recipe sites and rank results by normalized rating × review count × author trust × site trust × recency.
+- **`goat`** — Query any dish across curated recipe sites and rank results by normalized rating × review count × site trust × recency.
 
   _Use this when you need the single best version of a dish — the agent gets structured results with provenance and trust signals instead of guessing from a web search._
 

@@ -172,62 +172,13 @@ func BuildSearchURL(site Site, query string) string {
 	return r.Replace(site.SearchURL)
 }
 
-// curatedAuthors is a lowercase set of hand-picked recipe authors we trust
-// highly. Names are stored lowercased; lookup is case-insensitive.
-var curatedAuthors = map[string]bool{
-	"kenji lópez-alt":            true,
-	"kenji lopez-alt":            true,
-	"j. kenji lópez-alt":         true,
-	"j. kenji lopez-alt":         true,
-	"stella parks":               true,
-	"deb perelman":               true,
-	"samin nosrat":               true,
-	"ina garten":                 true,
-	"alton brown":                true,
-	"claire saffitz":             true,
-	"molly baz":                  true,
-	"carla lalli music":          true,
-	"budget bytes team":          true,
-	"beth moncel":                true,
-	"king arthur baking company": true,
-	"brian lagerstrom":           true,
-	"nagi maehashi":              true,
-	"namiko chen":                true,
-	"bill, judy, sarah, kaitlin": true,
-	"gaz oakley":                 true,
-	"john kanell":                true,
-	"sally mckenney":             true,
-	"sarah fennel":               true,
-	"gemma stafford":             true,
-	"chris scheuer":              true,
-	"swasthi":                    true,
-	"james delmage":              true,
-	// Note: Woks of Life (Kaitlin, Sarah, Bill, Judy) and Feed the Pudge
-	// (Ken) use single first names as bylines. Not added here — too
-	// collision-prone with uncurated authors on other sites. author_trust
-	// is only 20% of the score; Tier 1 site_trust (0.9) + ratings carry
-	// these sites fine.
-}
-
-// AuthorTrust returns a trust score in [0,1] for the given author. Curated
-// authors get 1.0; everyone else gets 0.5.
-func AuthorTrust(author string) float64 {
-	a := strings.ToLower(strings.TrimSpace(author))
-	if a == "" {
-		return 0.5
-	}
-	if curatedAuthors[a] {
-		return 1.0
-	}
-	return 0.5
-}
-
-// CuratedAuthors returns the curated list (for 'trust list' output). Names are
-// returned lowercased — callers can title-case them for display.
-func CuratedAuthors() []string {
-	out := make([]string, 0, len(curatedAuthors))
-	for a := range curatedAuthors {
-		out = append(out, a)
-	}
-	return out
-}
+// Author-trust scoring was removed in April 2026. The signal was largely
+// redundant with site curation: every Tier 1 site is an independent blog
+// where the author *is* the brand, and giving a bonus to named chefs on
+// top of site curation double-counted the signal. It also created
+// systematic noise — authors on curated sites whose byline format didn't
+// match the curated entry (e.g. "Sally" vs "Sally McKenney" in JSON-LD)
+// were silently penalized on their own blogs.
+//
+// If a cross-site author signal is reintroduced, prefer a boost tied to
+// authors who appear on 3+ distinct sites rather than a static list.

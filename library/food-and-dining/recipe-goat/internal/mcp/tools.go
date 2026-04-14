@@ -306,7 +306,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
 		"unique_capabilities": []map[string]string{
-			{"name": "Best-version ranker", "command": "goat", "description": "Query any dish across 15 trusted recipe sites and rank results by normalized rating × review count × author trust...", "rationale": "No existing tool ranks recipes across sites. recipe-scrapers extracts one URL at a time; Paprika/Mealie import one..."},
+			{"name": "Best-version ranker", "command": "goat", "description": "Query any dish across curated recipe sites and rank results by normalized rating × review count × site trust × recency.", "rationale": "No existing tool ranks recipes across sites. recipe-scrapers extracts one URL at a time; Paprika/Mealie import one..."},
 			{"name": "Substitution lookup", "command": "sub", "description": "Aggregate ingredient substitutions from King Arthur, Serious Eats, AllRecipes reviews, and Budget Bytes. Ranked by...", "rationale": "Substitutions are tribal knowledge scattered across per-ingredient pages; no unified tool aggregates them."},
 			{"name": "Pantry match", "command": "cookbook match", "description": "Find recipes in the local cookbook that you can make right now with listed ingredients, or with ≤N missing...", "rationale": "Requires local pantry + canonicalized ingredient store. No web tool has your pantry data."},
 			{"name": "Tonight picker", "command": "tonight", "description": "Pick dinner in 2 seconds: filter cookbook by time budget, recency from cook log, and dietary/kid-friendly flags.", "rationale": "Decision-fatigue killer. Requires local cook log + cookbook + filter set."},

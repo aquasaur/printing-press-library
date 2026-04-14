@@ -37,12 +37,12 @@ func newGoatCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "goat <query>",
 		Short: "Cross-site recipe ranker — fetch and rank the best version of any dish",
-		Long: `Search across 15 trusted recipe sites, fetch each candidate, then rank by
-a weighted score of rating, review volume, author trust, site trust, and recency.
+		Long: `Search across curated recipe sites, fetch each candidate, then rank by
+a weighted score of rating, review volume, site trust, and recency.
 
 Ranking weights:
-  0.45 rating_normalized + 0.20 log(reviews+1)/log(1000) + 0.20 author_trust
-  + 0.10 site_trust + 0.05 recency_norm`,
+  0.55 rating_normalized + 0.25 log(reviews+1)/log(1000)
+  + 0.15 site_trust + 0.05 recency_norm`,
 		Example: "  recipe-goat-pp-cli goat \"chicken tikka masala\" --limit 5",
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -233,7 +233,6 @@ func goatScore(r *recipes.Recipe, site recipes.Site) float64 {
 			reviewNorm = 1.0
 		}
 	}
-	authorTrust := recipes.AuthorTrust(r.Author)
 	siteTrust := site.Trust
 	if siteTrust == 0 {
 		siteTrust = 0.5
@@ -256,7 +255,7 @@ func goatScore(r *recipes.Recipe, site recipes.Site) float64 {
 			}
 		}
 	}
-	return 0.45*ratingNorm + 0.20*reviewNorm + 0.20*authorTrust + 0.10*siteTrust + 0.05*recency
+	return 0.55*ratingNorm + 0.25*reviewNorm + 0.15*siteTrust + 0.05*recency
 }
 
 func min(a, b int) int {

@@ -16,7 +16,7 @@ import (
 func newTrustCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "trust",
-		Short:   "View and override site/author trust scores (ranking integration wip)",
+		Short:   "View and override site trust scores (ranking integration wip)",
 		Example: "  recipe-goat-pp-cli trust list",
 	}
 	cmd.AddCommand(newTrustListCmd(flags))
@@ -27,13 +27,12 @@ func newTrustCmd(flags *rootFlags) *cobra.Command {
 func newTrustListCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
-		Short:   "List site trust scores + curated authors",
+		Short:   "List site trust scores",
 		Example: "  recipe-goat-pp-cli trust list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flags.asJSON {
 				payload := map[string]any{
-					"sites":   recipes.Sites,
-					"authors": recipes.CuratedAuthors(),
+					"sites": recipes.Sites,
 				}
 				return flags.printJSON(cmd, payload)
 			}
@@ -43,23 +42,19 @@ func newTrustListCmd(flags *rootFlags) *cobra.Command {
 			for _, s := range recipes.Sites {
 				rows = append(rows, []string{s.Hostname, strconv.Itoa(s.Tier), fmt.Sprintf("%.2f", s.Trust)})
 			}
-			if err := flags.printTable(cmd, headers, rows); err != nil {
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "\nCURATED AUTHORS (trust 1.00)")
-			for _, a := range recipes.CuratedAuthors() {
-				fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", a)
-			}
-			return nil
+			return flags.printTable(cmd, headers, rows)
 		},
 	}
 }
 
 // trustOverrides persisted at ~/.config/recipe-goat-pp-cli/trust.toml.
-// Shape: [authors] "name" = 0.9   [sites] "host" = 0.8
+// Shape: [sites] "host" = 0.8
+//
+// Author overrides were removed when author_trust was dropped from the
+// scoring formula. Existing trust.toml files with an [authors] section
+// still parse cleanly — the field is just unused going forward.
 type trustOverrides struct {
-	Authors map[string]float64 `toml:"authors"`
-	Sites   map[string]float64 `toml:"sites"`
+	Sites map[string]float64 `toml:"sites"`
 }
 
 func trustPath() string {
@@ -68,7 +63,7 @@ func trustPath() string {
 }
 
 func loadTrust() (trustOverrides, error) {
-	out := trustOverrides{Authors: map[string]float64{}, Sites: map[string]float64{}}
+	out := trustOverrides{Sites: map[string]float64{}}
 	data, err := os.ReadFile(trustPath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -78,9 +73,6 @@ func loadTrust() (trustOverrides, error) {
 	}
 	if err := toml.Unmarshal(data, &out); err != nil {
 		return out, err
-	}
-	if out.Authors == nil {
-		out.Authors = map[string]float64{}
 	}
 	if out.Sites == nil {
 		out.Sites = map[string]float64{}
@@ -102,9 +94,9 @@ func saveTrust(t trustOverrides) error {
 
 func newTrustSetCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
-		Use:     "set <author|site> <delta>",
-		Short:   "Persist a user trust override (ranking integration wip)",
-		Example: "  recipe-goat-pp-cli trust set kenji +2",
+		Use:     "set <site> <delta>",
+		Short:   "Persist a site trust override (ranking integration wip)",
+		Example: "  recipe-goat-pp-cli trust set seriouseats.com +2",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := args[0]
@@ -112,16 +104,16 @@ func newTrustSetCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return usageErr(fmt.Errorf("delta must be a number, got %q", args[1]))
 			}
+			// Only site overrides are supported — author_trust was removed
+			// from the scoring formula. Site hostnames contain a dot.
+			if !strings.Contains(target, ".") || strings.Contains(target, " ") {
+				return usageErr(fmt.Errorf("target %q is not a site hostname; author_trust was removed from the ranker", target))
+			}
 			overrides, err := loadTrust()
 			if err != nil {
 				return err
 			}
-			// Heuristic: if target looks like a hostname (contains a dot and no space), treat as site.
-			if strings.Contains(target, ".") && !strings.Contains(target, " ") {
-				overrides.Sites[strings.ToLower(target)] = delta
-			} else {
-				overrides.Authors[strings.ToLower(target)] = delta
-			}
+			overrides.Sites[strings.ToLower(target)] = delta
 			if flags.dryRun {
 				fmt.Fprintf(cmd.OutOrStdout(), "would save trust override for %s → %.2f\n", target, delta)
 				return nil
