@@ -14,10 +14,10 @@ import (
 	"time"
 )
 
-// newAvailabilityServer returns an httptest server that responds to the
-// Wayback availability API with the caller-supplied JSON body. Used in
-// place of real archive.org so tests are hermetic.
-func newAvailabilityServer(t *testing.T, body string, status int) *httptest.Server {
+// newCDXServer returns an httptest server that responds to the Wayback
+// CDX Search API with the caller-supplied JSON body. Used in place of real
+// archive.org so tests are hermetic.
+func newCDXServer(t *testing.T, body string, status int) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -26,16 +26,17 @@ func newAvailabilityServer(t *testing.T, body string, status int) *httptest.Serv
 	}))
 }
 
-// withAvailabilityURL temporarily swaps the package-level
-// archiveAvailabilityURL so tests can point the fallback at an httptest
-// server. Restored via t.Cleanup.
-func withAvailabilityURL(t *testing.T, url string) {
-	t.Helper()
-	// archiveAvailabilityURL is a const — can't swap directly. Tests that
-	// need to override the endpoint use the archiveAvailabilityURLForTest
-	// shim added below. This function documents the intent; it's a no-op
-	// placeholder so future refactors that make the URL variable have a
-	// clear hook.
+// cdxResponse builds a CDX JSON response body with a single data row
+// pointing at snapURL. The CDX JSON schema is [[headers...],[values...]].
+func cdxResponse(snapURL, timestamp string) string {
+	// The CDX `original` column stores the target URL, and the snapshot
+	// URL is assembled as https://web.archive.org/web/<timestamp>/<original>.
+	// For tests we want the final reconstructed URL to land on the
+	// httptest snapshot server, so we set `original` to the bare
+	// snapshot host/path and rely on the test to route via the
+	// rewriteTransport.
+	return fmt.Sprintf(`[["urlkey","timestamp","original","mimetype","statuscode","digest","length"],`+
+		`["com,example)/page","%s","%s","text/html","200","ABC123","12345"]]`, timestamp, snapURL)
 }
 
 // --- awaitArchiveSlot ---
@@ -90,18 +91,22 @@ func TestAwaitArchiveSlot_ContextCancellation(t *testing.T) {
 
 // --- fetchArchiveFallback end-to-end (via httptest) ---
 
-// setupFallbackServers wires up mock availability + snapshot servers and
-// makes the package-level archive URL point at them. Returns a client and
-// the snapshot handler's hit counter.
+// setupFallbackServers wires up mock CDX + snapshot servers and rewrites
+// the archive URL to point at them. Returns a client and the snapshot
+// handler's hit counter.
+//
+// Mechanics: the CDX server returns a response whose `original` column is
+// the TLS snapshot server's URL. The fallback code reconstructs the
+// snapshot URL as `https://web.archive.org/web/<ts>/<original>`; the
+// rewriteTransport rewrites that `https://web.archive.org` prefix to the
+// snapshot server's base.
 func setupFallbackServers(t *testing.T, snapBody string, snapStatus int) (*http.Client, *httptest.Server, *int64) {
 	t.Helper()
 	resetArchivePacing()
 
 	var snapHits int64
-	// Snapshot server is TLS so upgradeToHTTPS (called inside the
-	// fallback code path) produces a URL the test can reach. Without
-	// this, the http→https rewrite would leave the test pointing at a
-	// non-HTTPS httptest server.
+	// Snapshot server uses TLS (matches real web.archive.org and the HTTPS
+	// upgrade in the fallback code).
 	snapSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&snapHits, 1)
 		w.WriteHeader(snapStatus)
@@ -109,53 +114,64 @@ func setupFallbackServers(t *testing.T, snapBody string, snapStatus int) (*http.
 	}))
 	t.Cleanup(snapSrv.Close)
 
-	// The availability server returns JSON with a DELIBERATELY http://
-	// snapshot URL so we exercise the upgradeToHTTPS path. The test
-	// client skips cert verification since httptest uses a self-signed
-	// cert.
-	insecureSnapURL := "http://" + strings.TrimPrefix(snapSrv.URL, "https://") + "/page"
-	availBody := fmt.Sprintf(`{"archived_snapshots":{"closest":{"url":"%s","timestamp":"20260314204319","available":true}}}`, insecureSnapURL)
-	availSrv := newAvailabilityServer(t, availBody, http.StatusOK)
-	t.Cleanup(availSrv.Close)
+	// CDX response points `original` at the snapshot server's base URL so
+	// the reconstructed snapshot URL (https://web.archive.org/web/TS/ORIGINAL)
+	// has ORIGINAL already pointing at the test server. The
+	// rewriteTransport handles the `https://web.archive.org` prefix.
+	cdxBody := cdxResponse(snapSrv.URL+"/page", "20260314204319")
+	cdxSrv := newCDXServer(t, cdxBody, http.StatusOK)
+	t.Cleanup(cdxSrv.Close)
 
+	// Two rewrites are needed:
+	//   1. CDX lookups (archiveCDXURL → cdxSrv)
+	//   2. Snapshot fetches (https://web.archive.org/web/... → snapSrv)
 	client := &http.Client{
-		Transport: &rewriteTransport{
-			from: archiveAvailabilityURL,
-			to:   availSrv.URL,
-			tls:  &tls.Config{InsecureSkipVerify: true},
+		Transport: &multiRewriteTransport{
+			rewrites: []urlRewrite{
+				{from: archiveCDXURL, to: cdxSrv.URL},
+				{from: "https://web.archive.org", to: snapSrv.URL},
+			},
+			tls: &tls.Config{InsecureSkipVerify: true},
 		},
 		Timeout: 5 * time.Second,
 	}
 	return client, snapSrv, &snapHits
 }
 
-// rewriteTransport rewrites outbound requests whose URL starts with `from`
-// to instead hit `to`. Preserves path + query. Only used in tests.
-//
-// The `tls` field, when non-nil, configures cert verification for all
-// requests going through the underlying transport. Needed because
-// httptest.NewTLSServer uses a self-signed cert.
-type rewriteTransport struct {
+// urlRewrite is a single from→to URL prefix substitution.
+type urlRewrite struct {
 	from string
 	to   string
-	tls  *tls.Config
 }
 
-func (r *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+// multiRewriteTransport rewrites outbound requests matching any of the
+// `rewrites` prefixes. Preserves path + query. Only used in tests.
+//
+// The `tls` field, when non-nil, configures cert verification. Needed
+// because httptest.NewTLSServer uses a self-signed cert.
+type multiRewriteTransport struct {
+	rewrites []urlRewrite
+	tls      *tls.Config
+}
+
+func (r *multiRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	base := http.DefaultTransport.(*http.Transport).Clone()
 	if r.tls != nil {
 		base.TLSClientConfig = r.tls
 	}
-	if strings.HasPrefix(req.URL.String(), r.from) {
-		newURLStr := r.to + strings.TrimPrefix(req.URL.String(), r.from)
-		newReq := req.Clone(req.Context())
-		parsedURL, err := url.Parse(newURLStr)
-		if err != nil {
-			return nil, err
+	reqURL := req.URL.String()
+	for _, rw := range r.rewrites {
+		if strings.HasPrefix(reqURL, rw.from) {
+			newURLStr := rw.to + strings.TrimPrefix(reqURL, rw.from)
+			newReq := req.Clone(req.Context())
+			parsedURL, err := url.Parse(newURLStr)
+			if err != nil {
+				return nil, err
+			}
+			newReq.URL = parsedURL
+			newReq.Host = parsedURL.Host
+			return base.RoundTrip(newReq)
 		}
-		newReq.URL = parsedURL
-		newReq.Host = parsedURL.Host
-		return base.RoundTrip(newReq)
 	}
 	return base.RoundTrip(req)
 }
@@ -178,11 +194,12 @@ func TestFetchArchiveFallback_Success(t *testing.T) {
 
 func TestFetchArchiveFallback_NoSnapshot(t *testing.T) {
 	resetArchivePacing()
-	availSrv := newAvailabilityServer(t, `{"archived_snapshots":{}}`, http.StatusOK)
-	defer availSrv.Close()
+	// CDX returns only the header row — no data rows = no snapshot.
+	cdxSrv := newCDXServer(t, `[["urlkey","timestamp","original","mimetype","statuscode","digest","length"]]`, http.StatusOK)
+	defer cdxSrv.Close()
 
 	client := &http.Client{
-		Transport: &rewriteTransport{from: archiveAvailabilityURL, to: availSrv.URL},
+		Transport: &multiRewriteTransport{rewrites: []urlRewrite{{from: archiveCDXURL, to: cdxSrv.URL}}},
 		Timeout:   5 * time.Second,
 	}
 
@@ -195,22 +212,66 @@ func TestFetchArchiveFallback_NoSnapshot(t *testing.T) {
 	}
 }
 
-func TestFetchArchiveFallback_AvailabilityAPIDown(t *testing.T) {
+func TestFetchArchiveFallback_NoSnapshotEmptyBody(t *testing.T) {
+	// Some CDX responses come back with just whitespace or empty body
+	// when there are no matches. This should be treated as "no snapshot",
+	// not a parse error.
 	resetArchivePacing()
-	availSrv := newAvailabilityServer(t, "", http.StatusInternalServerError)
-	defer availSrv.Close()
+	cdxSrv := newCDXServer(t, "", http.StatusOK)
+	defer cdxSrv.Close()
 
 	client := &http.Client{
-		Transport: &rewriteTransport{from: archiveAvailabilityURL, to: availSrv.URL},
+		Transport: &multiRewriteTransport{rewrites: []urlRewrite{{from: archiveCDXURL, to: cdxSrv.URL}}},
+		Timeout:   5 * time.Second,
+	}
+
+	_, err := fetchArchiveFallback(context.Background(), client, "https://unknown.example/page")
+	if err == nil {
+		t.Fatal("expected error when response empty, got nil")
+	}
+	if !strings.Contains(err.Error(), "no wayback snapshot") {
+		t.Errorf("expected 'no wayback snapshot' error, got %v", err)
+	}
+}
+
+func TestFetchArchiveFallback_CDXAPIDown(t *testing.T) {
+	resetArchivePacing()
+	cdxSrv := newCDXServer(t, "", http.StatusInternalServerError)
+	defer cdxSrv.Close()
+
+	client := &http.Client{
+		Transport: &multiRewriteTransport{rewrites: []urlRewrite{{from: archiveCDXURL, to: cdxSrv.URL}}},
 		Timeout:   5 * time.Second,
 	}
 
 	_, err := fetchArchiveFallback(context.Background(), client, "https://x.example/page")
 	if err == nil {
-		t.Fatal("expected error when availability API returns 500")
+		t.Fatal("expected error when CDX API returns 500")
 	}
-	if !strings.Contains(err.Error(), "availability API") && !strings.Contains(err.Error(), "querying wayback") {
-		t.Errorf("expected availability-API error, got %v", err)
+	if !strings.Contains(err.Error(), "CDX API") && !strings.Contains(err.Error(), "querying wayback") {
+		t.Errorf("expected CDX API error, got %v", err)
+	}
+}
+
+func TestFetchArchiveFallback_CDXRateLimited(t *testing.T) {
+	// CDX API returns 429 when the caller has been throttled. This should
+	// surface as an error so the original ErrBlocked is returned to the
+	// user rather than silently returning empty content.
+	resetArchivePacing()
+	cdxSrv := newCDXServer(t, "", http.StatusTooManyRequests)
+	defer cdxSrv.Close()
+
+	client := &http.Client{
+		Transport: &multiRewriteTransport{rewrites: []urlRewrite{{from: archiveCDXURL, to: cdxSrv.URL}}},
+		Timeout:   5 * time.Second,
+	}
+
+	_, err := fetchArchiveFallback(context.Background(), client, "https://x.example/page")
+	if err == nil {
+		t.Fatal("expected error on 429")
+	}
+	if !strings.Contains(err.Error(), "429") && !strings.Contains(err.Error(), "rate limited") {
+		t.Errorf("expected rate-limit error, got %v", err)
 	}
 }
 
@@ -225,19 +286,43 @@ func TestFetchArchiveFallback_SnapshotFetchFails(t *testing.T) {
 	}
 }
 
-func TestFetchArchiveFallback_MalformedAvailabilityJSON(t *testing.T) {
+func TestFetchArchiveFallback_MalformedCDXJSON(t *testing.T) {
 	resetArchivePacing()
-	availSrv := newAvailabilityServer(t, "not json at all", http.StatusOK)
-	defer availSrv.Close()
+	cdxSrv := newCDXServer(t, "not json at all", http.StatusOK)
+	defer cdxSrv.Close()
 
 	client := &http.Client{
-		Transport: &rewriteTransport{from: archiveAvailabilityURL, to: availSrv.URL},
+		Transport: &multiRewriteTransport{rewrites: []urlRewrite{{from: archiveCDXURL, to: cdxSrv.URL}}},
 		Timeout:   5 * time.Second,
 	}
 
 	_, err := fetchArchiveFallback(context.Background(), client, "https://x.example/page")
 	if err == nil {
 		t.Fatal("expected error on malformed JSON")
+	}
+}
+
+func TestFetchArchiveFallback_CDXMissingColumns(t *testing.T) {
+	// Defensive: if the CDX schema ever changes and `timestamp` or
+	// `original` are missing from the header, we should error rather than
+	// silently return a malformed URL.
+	resetArchivePacing()
+	cdxSrv := newCDXServer(t,
+		`[["urlkey","mimetype","statuscode"],["com,example)/page","text/html","200"]]`,
+		http.StatusOK)
+	defer cdxSrv.Close()
+
+	client := &http.Client{
+		Transport: &multiRewriteTransport{rewrites: []urlRewrite{{from: archiveCDXURL, to: cdxSrv.URL}}},
+		Timeout:   5 * time.Second,
+	}
+
+	_, err := fetchArchiveFallback(context.Background(), client, "https://x.example/page")
+	if err == nil {
+		t.Fatal("expected error when CDX columns missing")
+	}
+	if !strings.Contains(err.Error(), "missing timestamp or original") {
+		t.Errorf("expected missing-columns error, got %v", err)
 	}
 }
 
