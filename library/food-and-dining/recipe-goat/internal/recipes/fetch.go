@@ -47,6 +47,19 @@ func Fetch(ctx context.Context, client *http.Client, recipeURL string) (*Recipe,
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusPaymentRequired || resp.StatusCode == http.StatusTooManyRequests {
+		// Close the failing live response before attempting fallback —
+		// the deferred close would run at return, but we're about to
+		// make more requests and don't want this connection held open.
+		_ = resp.Body.Close()
+		if archiveBody, archiveErr := fetchArchiveFallback(ctx, client, recipeURL); archiveErr == nil {
+			r, parseErr := ParseJSONLD(archiveBody, recipeURL)
+			if parseErr == nil {
+				return r, nil
+			}
+			// Archive snapshot parsed badly — fall through to the
+			// original ErrBlocked rather than returning the parse error,
+			// since the user's real problem is the live block.
+		}
 		return nil, fmt.Errorf("%w: %s returned HTTP %d", ErrBlocked, recipeURL, resp.StatusCode)
 	}
 	if resp.StatusCode >= 400 {
@@ -94,6 +107,10 @@ func FetchHTML(ctx context.Context, client *http.Client, target string) ([]byte,
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusPaymentRequired || resp.StatusCode == http.StatusTooManyRequests {
+		_ = resp.Body.Close()
+		if archiveBody, archiveErr := fetchArchiveFallback(ctx, client, target); archiveErr == nil {
+			return archiveBody, nil
+		}
 		return nil, fmt.Errorf("%w: %s returned HTTP %d", ErrBlocked, target, resp.StatusCode)
 	}
 	if resp.StatusCode >= 400 {
