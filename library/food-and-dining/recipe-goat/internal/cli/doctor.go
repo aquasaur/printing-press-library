@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/mvanhorn/printing-press-library/library/food-and-dining/recipe-goat/internal/config"
 	"github.com/mvanhorn/printing-press-library/library/food-and-dining/recipe-goat/internal/recipes"
+	"github.com/spf13/cobra"
 )
 
 func newDoctorCmd(flags *rootFlags) *cobra.Command {
@@ -131,7 +131,7 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 			for _, s := range recipes.Sites {
 				u := "https://www." + s.Hostname + "/"
 				req, _ := http.NewRequest("HEAD", u, nil)
-				req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+				req.Header.Set("User-Agent", recipes.ChromeUA)
 				status := "reachable"
 				code := 0
 				resp, err := probeClient.Do(req)

@@ -53,6 +53,12 @@ var Sites = []Site{
 	{Name: "The Woks of Life", Hostname: "thewoksoflife.com", Tier: 1, SearchURL: "https://thewoksoflife.com/?s={q}", Trust: 0.9},
 	{Name: "Just One Cookbook", Hostname: "justonecookbook.com", Tier: 1, SearchURL: "https://www.justonecookbook.com/?s={q}", Trust: 0.9},
 	{Name: "The Cozy Cook", Hostname: "thecozycook.com", Tier: 1, SearchURL: "https://thecozycook.com/?s={q}", Trust: 0.9},
+	{Name: "Feed the Pudge", Hostname: "feedthepudge.com", Tier: 1, SearchURL: "https://feedthepudge.com/?s={q}", Trust: 0.9},
+	{Name: "Preppy Kitchen", Hostname: "preppykitchen.com", Tier: 1, SearchURL: "https://preppykitchen.com/?s={q}", Trust: 0.9},
+	{Name: "Sally's Baking Addiction", Hostname: "sallysbakingaddiction.com", Tier: 1, SearchURL: "https://sallysbakingaddiction.com/?s={q}", Trust: 0.9},
+	{Name: "Broma Bakery", Hostname: "bromabakery.com", Tier: 1, SearchURL: "https://bromabakery.com/?s={q}", Trust: 0.9},
+	{Name: "Bigger Bolder Baking", Hostname: "biggerbolderbaking.com", Tier: 1, SearchURL: "https://www.biggerbolderbaking.com/?s={q}", Trust: 0.9},
+	{Name: "The Cafe Sucre Farine", Hostname: "thecafesucrefarine.com", Tier: 1, SearchURL: "https://thecafesucrefarine.com/?s={q}", Trust: 0.9},
 
 	// Tier 2 — brand/editorial authority, generally reachable but fragile
 	// (Condé Nast properties have started gating in recent quarters).
@@ -73,22 +79,28 @@ var Sites = []Site{
 // `recipe get` still get correct site-level metadata (trust, tier).
 // They're just absent from Sites so fan-out skips them.
 var recipeURLPatterns = map[string]string{
-	"kingarthurbaking.com": `^/recipes/[a-z0-9-]+-recipe$`,
-	"budgetbytes.com":      `^/[a-z0-9-]{6,}/?$`,
-	"smittenkitchen.com":   `^/\d{4}/\d{2}/[a-z0-9-]+/?$`,
-	"bbcgoodfood.com":      `^/recipes/[a-z0-9-]+$`,
-	"bbc.co.uk":            `^/food/recipes/[a-z0-9_]+_\d+$`,
-	"minimalistbaker.com":  `^/[a-z0-9-]{6,}/?$`,
-	"skinnytaste.com":      `^/[a-z0-9-]{6,}/?$`,
-	"thekitchn.com":        `^/(?:.*-recipe-\d+|recipe-[a-z0-9-]+)$`,
-	"recipetineats.com":    `^/[a-z0-9-]{6,}/?$`,
-	"thewoksoflife.com":    `^/[a-z0-9-]{6,}/?$`,
-	"justonecookbook.com":  `^/[a-z0-9-]{6,}/?$`,
-	"thecozycook.com":      `^/[a-z0-9-]{6,}/?$`,
-	"gazoakleychef.com":    `^/recipes/[a-z0-9-]+/?$`,
-	"bonappetit.com":       `^/recipe/[a-z0-9-]+$`,
-	"epicurious.com":       `^/recipes/food/views/[a-z0-9-]+$`,
-	"seriouseats.com":      `^/[a-z0-9-]+-recipe(-\d+)?$`,
+	"kingarthurbaking.com":      `^/recipes/[a-z0-9-]+-recipe$`,
+	"budgetbytes.com":           `^/[a-z0-9-]{6,}/?$`,
+	"smittenkitchen.com":        `^/\d{4}/\d{2}/[a-z0-9-]+/?$`,
+	"bbcgoodfood.com":           `^/recipes/[a-z0-9-]+$`,
+	"bbc.co.uk":                 `^/food/recipes/[a-z0-9_]+_\d+$`,
+	"minimalistbaker.com":       `^/[a-z0-9-]{6,}/?$`,
+	"skinnytaste.com":           `^/[a-z0-9-]{6,}/?$`,
+	"thekitchn.com":             `^/(?:.*-recipe-\d+|recipe-[a-z0-9-]+)$`,
+	"recipetineats.com":         `^/[a-z0-9-]{6,}/?$`,
+	"thewoksoflife.com":         `^/[a-z0-9-]{6,}/?$`,
+	"justonecookbook.com":       `^/[a-z0-9-]{6,}/?$`,
+	"thecozycook.com":           `^/[a-z0-9-]{6,}/?$`,
+	"feedthepudge.com":          `^/[a-z0-9-]{6,}/?$`,
+	"preppykitchen.com":         `^/[a-z0-9-]{6,}/?$`,
+	"sallysbakingaddiction.com": `^/[a-z0-9-]{6,}/?$`,
+	"bromabakery.com":           `^/[a-z0-9-]{6,}/?$`,
+	"biggerbolderbaking.com":    `^/[a-z0-9-]{6,}/?$`,
+	"thecafesucrefarine.com":    `^/[a-z0-9-]{6,}/?$`,
+	"gazoakleychef.com":         `^/recipes/[a-z0-9-]+/?$`,
+	"bonappetit.com":            `^/recipe/[a-z0-9-]+$`,
+	"epicurious.com":            `^/recipes/food/views/[a-z0-9-]+$`,
+	"seriouseats.com":           `^/[a-z0-9-]+-recipe(-\d+)?$`,
 
 	// Removed from fan-out but URLs still recognizable for `recipe get`:
 	"food52.com":        `^/recipes/\d+-[a-z0-9-]+$`,
@@ -166,6 +178,12 @@ var curatedAuthors = map[string]bool{
 	"namiko chen":                true,
 	"bill, judy, sarah, kaitlin": true,
 	"gaz oakley":                 true,
+	"john kanell":                true,
+	"sally mckenney":             true,
+	"sarah fennel":               true,
+	"gemma stafford":             true,
+	"chris scheuer":              true,
+	"ken tran":                   true,
 }
 
 // AuthorTrust returns a trust score in [0,1] for the given author. Curated
