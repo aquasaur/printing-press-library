@@ -1,259 +1,172 @@
 # Printing Press Library
 
-The curated collection of CLIs and MCP servers built by the [CLI Printing Press](https://github.com/mvanhorn/cli-printing-press).
+Printing Press Library is the published catalog for the [CLI Printing Press](https://github.com/mvanhorn/cli-printing-press): agent-friendly CLIs, MCP servers, and plugin skills generated from real APIs and shipped as installable tools.
 
-Every entry in this library was generated from an API spec, verified through the press's quality gates, and submitted via the `/printing-press publish` skill. They're not wrappers — they have local SQLite sync, offline search, workflow commands, and agent-optimized output.
+This repository currently includes 21 CLIs, 19 MCP servers, one mega-skill (`/ppl`), and 21 focused `pp-*` skills.
 
-The printing press generates both CLIs and MCP servers from the same spec. CLIs are the efficiency layer — fewer tokens, composable with pipes, works with any shell-based agent. MCP servers are the discovery layer — show up in Claude Desktop, Cursor, and marketplace listings. Use the CLI to set up auth and explore interactively. Use the MCP to let your AI editor call the API.
+## Start Here
 
-## Claude Code Plugin
+If you are using the plugin, install the repository by name:
 
-Skip the manual install. The library ships as a Claude Code plugin with a single skill that discovers, installs, and runs any CLI or MCP server in the collection.
-
-### Install
-
-```
+```text
 /install mvanhorn/printing-press-library
 ```
 
-Want to generate your own CLIs from API specs? Install the [CLI Printing Press](https://github.com/mvanhorn/cli-printing-press) plugin too:
+After install, the main router skill is:
 
+```text
+/ppl
 ```
+
+That naming split is intentional:
+
+- The repository and plugin are named `printing-press-library`
+- The mega-skill you actually use is `/ppl`
+
+If you also want to generate new tools from API specs, install the source project too:
+
+```text
 /install mvanhorn/cli-printing-press
 ```
 
-### Usage
+## Quick Examples
 
+```text
+/ppl
+/ppl sports scores
+/ppl install espn cli
+/ppl install espn mcp
+/ppl espn lakers score
+/ppl linear my open issues
+/pp-espn lakers score
+/pp-weather-goat phoenix forecast
 ```
-/printing-press-library                          # Browse the full catalog
-/printing-press-library sports scores            # Search by topic
-/printing-press-library install espn cli         # Install a CLI
-/printing-press-library install espn mcp         # Install an MCP server
-/printing-press-library espn lakers score        # Run a CLI directly
-/printing-press-library lakers score             # Semantic match — finds ESPN, installs if needed, runs it
+
+Use `/ppl` when you want discovery, routing, or installation. Use a focused `pp-*` skill when you already know the tool you want.
+
+## What This Repo Ships
+
+- [`plugin/skills/ppl/SKILL.md`](plugin/skills/ppl/SKILL.md): the mega-skill that browses the catalog, installs CLIs and MCP servers, and routes user requests to the right tool
+- [`plugin/skills/`](plugin/skills/): one focused skill per published tool, such as `pp-espn`, `pp-linear`, and `pp-weather-goat`
+- [`library/`](library/): the actual Go modules for each CLI and MCP server
+- [`registry.json`](registry.json): the machine-readable source of truth for the published catalog
+
+The top-level README is the human guide. `registry.json` is the authoritative index.
+
+## Catalog
+
+Current published tools, grouped by how people usually reach for them. Each row links to the tool source and its focused plugin skill.
+
+| Name | Skill | Auth | MCP | What it does |
+|------|-------|------|-----|--------------|
+| [`agent-capture`](library/developer-tools/agent-capture/) | [`/pp-agent-capture`](plugin/skills/pp-agent-capture/SKILL.md) | local only | no | Record, screenshot, and convert macOS windows and screens for agent evidence. |
+| [`archive-is`](library/media-and-entertainment/archive-is/) | [`/pp-archive-is`](plugin/skills/pp-archive-is/SKILL.md) | none | full | Find and create Archive.today snapshots for URLs. |
+| [`cal-com`](library/productivity/cal-com/) | [`/pp-cal-com`](plugin/skills/pp-cal-com/SKILL.md) | API key | full | Manage bookings, schedules, event types, and availability. |
+| [`dominos-pp-cli`](library/commerce/dominos-pp-cli/) | [`/pp-dominos`](plugin/skills/pp-dominos/SKILL.md) | browser login | full | Order Domino's, browse menus, and track deliveries. |
+| [`dub`](library/marketing/dub/) | [`/pp-dub`](plugin/skills/pp-dub/SKILL.md) | API key | full | Create short links, track analytics, and manage domains. |
+| [`espn`](library/media-and-entertainment/espn/) | [`/pp-espn`](plugin/skills/pp-espn/SKILL.md) | none | full | Live scores, standings, schedules, and sports news. |
+| [`flightgoat`](library/travel/flightgoat/) | [`/pp-flightgoat`](plugin/skills/pp-flightgoat/SKILL.md) | API key optional | full | Search flights, explore routes, and track flights. |
+| [`hackernews`](library/media-and-entertainment/hackernews/) | [`/pp-hackernews`](plugin/skills/pp-hackernews/SKILL.md) | none | full | Browse stories, comments, jobs, and topic slices from Hacker News. |
+| [`hubspot-pp-cli`](library/sales-and-crm/hubspot/) | [`/pp-hubspot`](plugin/skills/pp-hubspot/SKILL.md) | API key | full | Work with contacts, companies, deals, tickets, and pipelines. |
+| [`instacart`](library/commerce/instacart/) | [`/pp-instacart`](plugin/skills/pp-instacart/SKILL.md) | browser session | no | Search products, manage carts, and shop Instacart from the terminal. |
+| [`kalshi`](library/payments/kalshi/) | [`/pp-kalshi`](plugin/skills/pp-kalshi/SKILL.md) | API key | full | Trade markets, inspect portfolios, and analyze odds. |
+| [`linear`](library/project-management/linear/) | [`/pp-linear`](plugin/skills/pp-linear/SKILL.md) | API key | full | Manage issues, cycles, teams, and projects with local sync. |
+| [`movie-goat`](library/media-and-entertainment/movie-goat/) | [`/pp-movie-goat`](plugin/skills/pp-movie-goat/SKILL.md) | bearer token | full | Compare movie ratings, streaming availability, and recommendations. |
+| [`pagliacci-pizza`](library/food-and-dining/pagliacci-pizza/) | [`/pp-pagliacci-pizza`](plugin/skills/pp-pagliacci-pizza/SKILL.md) | browser login | partial | Order Pagliacci and browse public menu and store data without login. |
+| [`postman-explore`](library/developer-tools/postman-explore/) | [`/pp-postman-explore`](plugin/skills/pp-postman-explore/SKILL.md) | none | full | Search and browse the Postman API Network. |
+| [`recipe-goat`](library/food-and-dining/recipe-goat/) | [`/pp-recipe-goat`](plugin/skills/pp-recipe-goat/SKILL.md) | API key | full | Find recipes across trusted sites and pull nutrition context. |
+| [`slack`](library/productivity/slack/) | [`/pp-slack`](plugin/skills/pp-slack/SKILL.md) | API key | full | Send messages, search conversations, and monitor channels. |
+| [`steam-web`](library/media-and-entertainment/steam-web/) | [`/pp-steam-web`](plugin/skills/pp-steam-web/SKILL.md) | API key | full | Look up Steam players, games, achievements, and stats. |
+| [`trigger-dev`](library/developer-tools/trigger-dev/) | [`/pp-trigger-dev`](plugin/skills/pp-trigger-dev/SKILL.md) | API key | full | Monitor runs, trigger tasks, and inspect schedules and failures. |
+| [`weather-goat`](library/other/weather-goat/) | [`/pp-weather-goat`](plugin/skills/pp-weather-goat/SKILL.md) | none | full | Forecasts, alerts, air quality, and activity verdicts. |
+| [`yahoo-finance`](library/commerce/yahoo-finance/) | [`/pp-yahoo-finance`](plugin/skills/pp-yahoo-finance/SKILL.md) | none | full | Quotes, charts, fundamentals, options, and watchlists. |
+
+## Installation Paths
+
+### Recommended: let `/ppl` handle it
+
+```text
+/ppl install <name> cli
+/ppl install <name> mcp
 ```
 
-The skill reads the registry, matches your query to the right CLI, handles installation via `go install`, and executes commands with the `--agent` flag for structured output. See the [SKILL.md](skills/printing-press-library/SKILL.md) for the full routing logic.
+That keeps users off of repo-path trivia and lets the skill read from [`registry.json`](registry.json).
 
-## Published CLIs
+### Direct CLI install
 
-### Works immediately (no auth required)
-
-| CLI | MCP | API | Tools | What it does |
-|-----|-----|-----|-------|-------------|
-| **[archive-is-pp-cli](library/media-and-entertainment/archive-is/)** | archive-is-pp-mcp | Archive.today | 6 | Bypass paywalls and look up web archives via archive.today. Lookup-before-submit, Wayback fallback, agent-hints on stderr. |
-| **[espn-pp-cli](library/media-and-entertainment/espn/)** | espn-pp-mcp | ESPN | 3 | Sports data — scores, stats, standings, schedules, news, odds across 17 sports and 139 leagues. |
-| **[flightgoat-pp-cli](library/travel/flightgoat/)** | flightgoat-pp-mcp | flightgoat | 58 | Free Google Flights search, Kayak nonstop route explorer, and optional FlightAware live tracking (API key optional for tracking). |
-| **[postman-explore-pp-cli](library/developer-tools/postman-explore/)** | postman-explore-pp-mcp | Postman Explore | 9 | Search and browse the Postman API Network. |
-
-### API key required
-
-| CLI | MCP | API | Tools | What it does |
-|-----|-----|-----|-------|-------------|
-| **[dub-pp-cli](library/marketing/dub/)** | dub-pp-mcp | Dub | 53 | Create short links, track analytics, manage domains, and run affiliate programs. |
-| **[hubspot-pp-cli](library/sales-and-crm/hubspot/)** | hubspot-pp-mcp | HubSpot | 50+ | CRM contacts, companies, deals, tickets, engagements, pipelines, and associations with offline search and pipeline analytics. |
-| **[kalshi-pp-cli](library/payments/kalshi/)** | kalshi-pp-mcp | Kalshi | 89 | Trade prediction markets, track portfolios, and analyze odds on Kalshi from the command line. |
-| **[linear-pp-cli](library/project-management/linear/)** | linear-pp-mcp | Linear | 63 | Issues, cycles, teams, projects via GraphQL. Local sync, stale detection, team health scoring. |
-| **[movie-goat-pp-cli](library/media-and-entertainment/movie-goat/)** | movie-goat-pp-mcp | TMDb + OMDb | 25 | Multi-source movie ratings (TMDb + OMDb), streaming availability, and cross-taste recommendations. |
-| **[slack-pp-cli](library/productivity/slack/)** | slack-pp-mcp | Slack | 50+ | Send messages, search conversations, monitor channels, manage workspace. 8 transcendence analytics commands. |
-| **[steam-web-pp-cli](library/media-and-entertainment/steam-web/)** | steam-web-pp-mcp | Steam Web | 164 (29 public) | Look up Steam players, games, achievements, friends, and stats. 29 tools work without an API key. |
-| **[trigger-dev-pp-cli](library/developer-tools/trigger-dev/)** | trigger-dev-pp-mcp | Trigger.dev | 40+ | Monitor runs, trigger tasks, manage schedules, and detect failures. Real-time failure watch with desktop notifications. |
-| **[cal-com-pp-cli](library/productivity/cal-com/)** | cal-com-pp-mcp | Cal.com | 288 | Manage bookings, event types, schedules, and availability. |
-
-### Browser login required
-
-| CLI | MCP | API | Tools | What it does |
-|-----|-----|-----|-------|-------------|
-| **[dominos-pp-cli](library/commerce/dominos-pp-cli/)** | dominos-mcp | Domino's Pizza | 25+ | Order pizza, browse menus, track deliveries, manage rewards. Offline menu search, saved order templates, deal optimization. |
-
-### Partial MCP (some tools work without auth)
-
-| CLI | MCP | API | Tools | What it does |
-|-----|-----|-----|-------|-------------|
-| **[pagliacci-pizza-pp-cli](library/food-and-dining/pagliacci-pizza/)** | pagliacci-pizza-pp-mcp | Pagliacci Pizza | 41 (10 public) | Order pizza, browse menus, manage rewards. 10 tools (stores, menus, pricing, scheduling) work without login. |
-
-### CLI only (no MCP server)
-
-| CLI | API | What it does |
-|-----|-----|-------------|
-| **[agent-capture-pp-cli](library/developer-tools/agent-capture/)** | agent-capture | Record, screenshot, and convert macOS windows and screens for AI agent evidence. |
-| **[instacart-pp-cli](library/commerce/instacart/)** | Instacart | Natural-language Instacart CLI via the web GraphQL API. Add items, search products, and manage carts across retailers without browser automation. |
-
-## Install
-
-Each CLI is a standalone Go module with both a CLI and MCP binary. You need [Go 1.23+](https://go.dev/dl/) installed.
-
-### CLI (go install)
+You need [Go 1.23+](https://go.dev/dl/).
 
 ```bash
-# ESPN — sports scores, stats, standings (no auth)
+go install github.com/mvanhorn/printing-press-library/<path>/cmd/<binary>@latest
+```
+
+Examples:
+
+```bash
 go install github.com/mvanhorn/printing-press-library/library/media-and-entertainment/espn/cmd/espn-pp-cli@latest
-
-# Dub — link management (set DUB_TOKEN env var)
-go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-cli@latest
-
-# Linear — project management (set LINEAR_API_KEY env var)
 go install github.com/mvanhorn/printing-press-library/library/project-management/linear/cmd/linear-pp-cli@latest
-
-# Cal.com — scheduling (set CAL_COM_TOKEN env var)
-go install github.com/mvanhorn/printing-press-library/library/productivity/cal-com/cmd/cal-com-pp-cli@latest
-
-# Steam Web — gaming data (set STEAM_WEB_API_KEY env var)
-go install github.com/mvanhorn/printing-press-library/library/media-and-entertainment/steam-web/cmd/steam-web-pp-cli@latest
-
-# Postman Explore — API network browser (no auth)
-go install github.com/mvanhorn/printing-press-library/library/developer-tools/postman-explore/cmd/postman-explore-pp-cli@latest
-
-# HubSpot — CRM (set HUBSPOT_ACCESS_TOKEN env var)
-go install github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot/cmd/hubspot-pp-cli@latest
-
-# Slack — workspace messaging (set SLACK_BOT_TOKEN env var)
-go install github.com/mvanhorn/printing-press-library/library/productivity/slack/cmd/slack-pp-cli@latest
-
-# Trigger.dev — background jobs (set TRIGGER_SECRET_KEY env var)
-go install github.com/mvanhorn/printing-press-library/library/developer-tools/trigger-dev/cmd/trigger-dev-pp-cli@latest
-
-# Domino's Pizza — pizza ordering (browser login)
-go install github.com/mvanhorn/printing-press-library/library/commerce/dominos-pp-cli/cmd/dominos-pp-cli@latest
-
-# Pagliacci Pizza — pizza ordering (browser login for full access)
-go install github.com/mvanhorn/printing-press-library/library/food-and-dining/pagliacci-pizza/cmd/pagliacci-pizza-pp-cli@latest
-
-# Archive.today — paywall bypass and archive lookup (no auth)
-go install github.com/mvanhorn/printing-press-library/library/media-and-entertainment/archive-is/cmd/archive-is-pp-cli@latest
-
-# flightgoat — flights search and tracking (FLIGHTGOAT_API_KEY_AUTH optional for FlightAware tracking)
-go install github.com/mvanhorn/printing-press-library/library/travel/flightgoat/cmd/flightgoat-pp-cli@latest
-
-# Instacart — grocery ordering via web GraphQL (browser cookie session)
-go install github.com/mvanhorn/printing-press-library/library/commerce/instacart/cmd/instacart-pp-cli@latest
-
-# Kalshi — prediction markets (set KALSHI_API_KEY env var)
-go install github.com/mvanhorn/printing-press-library/library/payments/kalshi/cmd/kalshi-pp-cli@latest
-
-# Movie Goat — movie ratings and streaming availability (set TMDB_API_KEY env var)
-go install github.com/mvanhorn/printing-press-library/library/media-and-entertainment/movie-goat/cmd/movie-goat-pp-cli@latest
+go install github.com/mvanhorn/printing-press-library/library/other/weather-goat/cmd/weather-goat-pp-cli@latest
 ```
 
-### MCP Server (Claude Desktop / Cursor)
+### Direct MCP install
 
 ```bash
-# Install the MCP binary
-go install github.com/mvanhorn/printing-press-library/library/media-and-entertainment/espn/cmd/espn-pp-mcp@latest
+go install github.com/mvanhorn/printing-press-library/<path>/cmd/<mcp-binary>@latest
+claude mcp add <mcp-binary> -- <mcp-binary>
+```
 
-# Add to Claude Code
+Examples:
+
+```bash
+go install github.com/mvanhorn/printing-press-library/library/media-and-entertainment/espn/cmd/espn-pp-mcp@latest
 claude mcp add espn-pp-mcp -- espn-pp-mcp
 
-# With API key (example: Dub)
-claude mcp add dub-pp-mcp -e DUB_TOKEN=your-key -- dub-pp-mcp
-
-# With API key (example: Steam Web)
-claude mcp add steam-web-pp-mcp -e STEAM_WEB_API_KEY=your-key -- steam-web-pp-mcp
+go install github.com/mvanhorn/printing-press-library/library/other/weather-goat/cmd/weather-goat-pp-mcp@latest
+claude mcp add weather-goat-pp-mcp -- weather-goat-pp-mcp
 ```
 
-The binary lands in your `$GOPATH/bin` (or `$HOME/go/bin` by default). Make sure that's on your `PATH`.
+If a tool needs credentials, the focused skill and the tool README document the required environment variables.
 
-### From source
+## Repo Structure
 
-```bash
-git clone https://github.com/mvanhorn/printing-press-library.git
-cd printing-press-library/library/<category>/<cli-name>
-go install ./cmd/<cli-name>       # CLI
-go install ./cmd/<cli-name-pp-mcp>   # MCP server (if available)
-```
-
-Check each CLI's own README for usage, configuration, and required environment variables.
-
-## Structure
-
-```
+```text
 library/
   <category>/
-    <cli-name>/
+    <tool>/
       cmd/
-        <cli-name>/           # CLI binary
-        <cli-name-pp-mcp>/    # MCP server binary
+        <cli-binary>/
+        <mcp-binary>/        # when available
       internal/
-      .printing-press.json    # provenance manifest (includes MCP metadata)
-      .manuscripts/           # research + verification artifacts
-        <run-id>/
-          research/
-          proofs/
-          discovery/
       README.md
       go.mod
-      ...
+      .printing-press.json
+      .manuscripts/
+
+plugin/
+  skills/
+    ppl/
+      SKILL.md
+    pp-*/
+      SKILL.md
+
+registry.json
 ```
 
-CLIs are organized by category. Each CLI folder is self-contained — it includes the full source code, the provenance manifest, and the manuscripts (research briefs, shipcheck results, discovery provenance) from the printing run.
-
-## Categories
-
-| Category | What goes here |
-|----------|---------------|
-| `ai` | LLMs, inference, ML, computer vision |
-| `auth` | Identity, SSO, user management |
-| `cloud` | Compute, DNS, CDN, storage, infrastructure |
-| `commerce` | Storefronts, inventory, orders, shopping |
-| `developer-tools` | SCM, CI/CD, feature flags, hosting |
-| `devices` | Smart home, wearables, hardware |
-| `food-and-dining` | Restaurants, recipes, delivery, reviews |
-| `marketing` | Email campaigns, automation |
-| `media-and-entertainment` | Streaming, sports, video, music, content platforms |
-| `monitoring` | Error tracking, APM, alerting, product analytics |
-| `payments` | Billing, transactions, banking, fintech |
-| `productivity` | Docs, wikis, databases, scheduling |
-| `project-management` | Tasks, sprints, issues, roadmaps |
-| `sales-and-crm` | Pipelines, contacts, deals |
-| `social-and-messaging` | Chat, SMS, voice, social, streaming, media |
-| `travel` | Flights, hotels, maps, transit |
-| `other` | Anything that doesn't fit above |
+Each published tool is self-contained: source code, a local README, provenance metadata, and manuscripts from the printing run.
 
 ## What "Endorsed" Means
 
-Every CLI in this library has passed:
+Every published tool in this repo has passed:
 
-1. **Generation** — Built by the CLI Printing Press from an API spec
-2. **Validation** — `go build`, `go vet`, `--help`, and `--version` all pass
-3. **Provenance** — `.printing-press.json` manifest and `.manuscripts/` artifacts are present
+1. Generation from an API spec or captured interface through the CLI Printing Press
+2. Validation checks such as build, vet, help, and version
+3. Provenance capture through `.printing-press.json` and `.manuscripts/`
 
-CLIs may be improved after generation (emboss passes, manual refinements). The manuscripts show what was originally generated, and the diff shows what changed.
-
-## Registry
-
-`registry.json` at the repo root is a machine-readable index of all CLIs with MCP metadata:
-
-```json
-{
-  "schema_version": 1,
-  "entries": [
-    {
-      "name": "espn-pp-cli",
-      "category": "media-and-entertainment",
-      "api": "ESPN",
-      "description": "ESPN sports CLI with live scores, standings, stats, and offline search",
-      "path": "library/media-and-entertainment/espn",
-      "mcp": {
-        "binary": "espn-pp-mcp",
-        "transport": "stdio",
-        "tool_count": 1,
-        "public_tool_count": 1,
-        "auth_type": "none",
-        "env_vars": [],
-        "mcp_ready": "full"
-      }
-    }
-  ]
-}
-```
-
-## Want to generate your own?
-
-The [CLI Printing Press](https://github.com/mvanhorn/cli-printing-press) has 18 APIs in its catalog ready to go, and can generate CLIs from any OpenAPI spec, GraphQL schema, or even sniffed browser traffic.
+Some tools are refined after generation. The generated artifacts remain in the tool directory so the provenance stays inspectable.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit a CLI.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
