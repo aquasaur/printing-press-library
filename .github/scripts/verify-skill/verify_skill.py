@@ -165,13 +165,101 @@ def find_command_source(cli_dir: Path, cmd_path: list[str]):
             if go_file.name == expected_basename:
                 return [go_file], use_str, args_info
 
-    # Single-token paths (or no filename match): take all files at the
-    # highest specificity tier. For flag verification, any one of them
-    # declaring the flag counts. For Use string, pick the representative.
+    # Disambiguation: multiple cobra.Commands can share a `Use:` leaf when
+    # one is a top-level domain command and another is a subcommand under
+    # an unrelated parent (e.g. both the top-level `save` and PR #218's
+    # `profile save` subcommand use `Use: "save..."`). The specificity
+    # tiebreaker below is not enough — the subcommand sometimes has MORE
+    # positional tokens than the top-level. Resolve via the constructor
+    # naming convention printing-press follows:
+    #
+    #   top-level:  newXxxCmd   (registered via rootCmd.AddCommand)
+    #   subcommand: new{Parent1}{Parent2}...{Leaf}Cmd
+    #
+    # Single-token path ["save"]  -> prefer enclosing fn in root_ctors
+    # Multi-token path  ["profile", "delete"] -> prefer enclosing fn that
+    #                                           matches "newProfileDeleteCmd"
+    root_ctors = root_level_constructors(cli_dir)
+    if root_ctors:
+        if len(cmd_path) == 1:
+            preferred = [
+                c for c in candidates
+                if enclosing_constructor(c[1], c[2]) in root_ctors
+            ]
+        else:
+            expected_ctor = (
+                "new"
+                + "".join(_title(seg) for seg in cmd_path)
+                + "Cmd"
+            )
+            preferred = [
+                c for c in candidates
+                if enclosing_constructor(c[1], c[2]) == expected_ctor
+            ]
+        if preferred:
+            preferred.sort(key=lambda c: -c[0])
+            top_spec = preferred[0][0]
+            top_files = [c[1] for c in preferred if c[0] == top_spec]
+            return top_files, preferred[0][2], preferred[0][3]
+
+    # Fallback: take all files at the highest specificity tier. For flag
+    # verification, any one of them declaring the flag counts. For Use
+    # string, pick the representative.
     candidates.sort(key=lambda c: -c[0])
     top_spec = candidates[0][0]
     top_files = [c[1] for c in candidates if c[0] == top_spec]
     return top_files, candidates[0][2], candidates[0][3]
+
+
+def _title(seg: str) -> str:
+    """Title-case a command path segment, mirroring printing-press's Go
+    identifier convention. Hyphens split into separate title-cased parts:
+    `agent-context` → `AgentContext`. `save` → `Save`."""
+    return "".join(w.capitalize() for w in seg.split("-") if w)
+
+
+# Matches `rootCmd.AddCommand(newFooCmd(...))` or `root.AddCommand(...)`,
+# capturing the constructor function name.
+_ROOT_ADDCOMMAND_RE = re.compile(r"\brootCmd\.AddCommand\(\s*(\w+)\s*\(")
+
+
+def root_level_constructors(cli_dir: Path) -> set[str]:
+    """Return the set of constructor function names registered via
+    rootCmd.AddCommand(...) in root.go. Used to disambiguate top-level
+    commands from same-named subcommands that live in other files.
+    Returns empty set if root.go can't be read or doesn't use rootCmd."""
+    root_go = cli_dir / "internal/cli/root.go"
+    try:
+        text = root_go.read_text()
+    except Exception:
+        return set()
+    return set(_ROOT_ADDCOMMAND_RE.findall(text))
+
+
+def enclosing_constructor(go_file: Path, use_str: str) -> str:
+    """Return the name of the `func newXxxCmd(...) *cobra.Command {` that
+    lexically contains the `Use: "<use_str>"` declaration in go_file.
+    Empty string if not found — caller treats that as "not a constructor"
+    and excludes it from root-level matching."""
+    try:
+        text = go_file.read_text()
+    except Exception:
+        return ""
+    needle = f'Use:'
+    # Find the specific Use declaration matching this use_str.
+    target_idx = -1
+    for m in re.finditer(r'Use:\s*(?:=\s*)?"([^"]*)"', text):
+        if m.group(1) == use_str:
+            target_idx = m.start()
+            break
+    if target_idx < 0:
+        return ""
+    # Walk backwards for the nearest `func newXxxCmd(` preceding this Use.
+    preceding = text[:target_idx]
+    funcs = list(re.finditer(r"func\s+(\w+)\s*\(", preceding))
+    if not funcs:
+        return ""
+    return funcs[-1].group(1)
 
 
 def flag_declared_in(files: Iterable[Path], flag_name: str) -> bool:
