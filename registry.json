@@ -117,6 +117,13 @@
       }
     },
     {
+      "name": "expensify",
+      "category": "productivity",
+      "api": "Expensify",
+      "description": "File expenses, create reports, and submit for approval from the terminal. Local SQLite cache powers cross-year offline search, rollups, missing-receipt detection, and duplicate detection.",
+      "path": "library/productivity/expensify"
+    },
+    {
       "name": "flightgoat",
       "category": "travel",
       "api": "flightgoat",
