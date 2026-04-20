@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -15,6 +16,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/sales-and-crm/contact-goat/internal/chromecookies"
 	"github.com/mvanhorn/printing-press-library/library/sales-and-crm/contact-goat/internal/client"
 	"github.com/mvanhorn/printing-press-library/library/sales-and-crm/contact-goat/internal/config"
+	hpapi "github.com/mvanhorn/printing-press-library/library/sales-and-crm/contact-goat/internal/happenstance/api"
 	"github.com/spf13/cobra"
 )
 
@@ -103,7 +105,14 @@ func Execute() error {
 	rootCmd.AddCommand(newTailCmd(&flags))
 	rootCmd.AddCommand(newAnalyticsCmd(&flags))
 	rootCmd.AddCommand(newWorkflowCmd(&flags))
-	rootCmd.AddCommand(newAPICmd(&flags))
+	apiCmd := newAPICmd(&flags)
+	// Nest the Happenstance public REST API under `api hpn` so the full
+	// path is `contact-goat-pp-cli api hpn <subcommand>`. Registered here
+	// (rather than inside newAPICmd) because newAPICmd is generated and
+	// marked DO NOT EDIT — keeping the registration at the seam preserves
+	// the regenerator's idempotence.
+	apiCmd.AddCommand(newAPIHpnCmd(&flags))
+	rootCmd.AddCommand(apiCmd)
 	rootCmd.AddCommand(newFriendsPromotedCmd(&flags))
 	rootCmd.AddCommand(newHPCmd(&flags))
 	rootCmd.AddCommand(newUserPromotedCmd(&flags))
@@ -188,6 +197,43 @@ func (f *rootFlags) newClientRequireCookies(service string) (*client.Client, err
 	return nil, authErr(fmt.Errorf(
 		"no saved Chrome cookies for %s (looked at %s)\nRun `contact-goat-pp-cli auth login --chrome --service %s` first",
 		service, path, service))
+}
+
+// newHappenstanceAPIClient constructs a bearer-auth client for the
+// Happenstance public REST API at api.happenstance.ai/v1. It mirrors the
+// shape of newClient / newClientRequireCookies but routes through the
+// peer package internal/happenstance/api.
+//
+// The bearer key is read via config.LoadAPIKey, which prefers the
+// HAPPENSTANCE_API_KEY environment variable over the config file's
+// happenstance_api_key field. Returns an authErr (exit code 4) when no
+// key is configured — same exit-code contract as the cookie-required
+// helper, so callers route both auth-failure paths through one branch.
+//
+// The dryRun flag on rootFlags is forwarded so `--dry-run` against any
+// bearer-using command prints the redacted request line and exits
+// without sending. The bearer key never reaches stdout in dry-run mode;
+// see internal/happenstance/api/http.go (printDryRun).
+func (f *rootFlags) newHappenstanceAPIClient() (*hpapi.Client, error) {
+	cfg, err := config.Load(f.configPath)
+	if err != nil {
+		return nil, configErr(err)
+	}
+	key := config.LoadAPIKey(cfg)
+	if key == "" {
+		return nil, authErr(fmt.Errorf(
+			"%s required for the Happenstance public-API surface (provision at %s)",
+			hpapi.KeyEnvVar, hpapi.RotationURL,
+		))
+	}
+	opts := []hpapi.Option{}
+	if f.dryRun {
+		opts = append(opts, hpapi.WithDryRun(true))
+	}
+	if f.timeout > 0 {
+		opts = append(opts, hpapi.WithHTTPClient(&http.Client{Timeout: f.timeout}))
+	}
+	return hpapi.NewClient(key, opts...), nil
 }
 
 func attachCookieAuthIfAvailable(c *client.Client, service string) error {
