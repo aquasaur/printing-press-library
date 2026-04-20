@@ -48,10 +48,11 @@ Use `/ppl` when you want discovery, routing, or installation. Use a focused `pp-
 
 ## What This Repo Ships
 
-- [`plugin/skills/ppl/SKILL.md`](plugin/skills/ppl/SKILL.md): the mega-skill that browses the catalog, installs CLIs and MCP servers, and routes user requests to the right tool
-- [`plugin/skills/`](plugin/skills/): one focused skill per published tool, such as `pp-espn`, `pp-linear`, and `pp-weather-goat`
+- [`skills/ppl/SKILL.md`](skills/ppl/SKILL.md): the mega-skill that browses the catalog, installs CLIs and MCP servers, and routes user requests to the right tool
+- [`skills/`](skills/): one focused skill per published tool, such as `pp-espn`, `pp-linear`, and `pp-weather-goat`
 - [`library/`](library/): the actual Go modules for each CLI and MCP server
 - [`registry.json`](registry.json): the machine-readable source of truth for the published catalog
+- [`.claude-plugin/`](.claude-plugin/): the marketplace and plugin manifests — the whole repo is the plugin
 
 The top-level README is the human guide. `registry.json` is the authoritative index.
 
@@ -61,27 +62,27 @@ Current published tools, grouped by how people usually reach for them. Each row 
 
 | Name | Skill | Auth | MCP | What it does |
 |------|-------|------|-----|--------------|
-| [`agent-capture`](library/developer-tools/agent-capture/) | [`/pp-agent-capture`](plugin/skills/pp-agent-capture/SKILL.md) | local only | no | Record, screenshot, and convert macOS windows and screens for agent evidence. |
-| [`archive-is`](library/media-and-entertainment/archive-is/) | [`/pp-archive-is`](plugin/skills/pp-archive-is/SKILL.md) | none | full | Find and create Archive.today snapshots for URLs. |
-| [`cal-com`](library/productivity/cal-com/) | [`/pp-cal-com`](plugin/skills/pp-cal-com/SKILL.md) | API key | full | Manage bookings, schedules, event types, and availability. |
-| [`dominos-pp-cli`](library/commerce/dominos-pp-cli/) | [`/pp-dominos`](plugin/skills/pp-dominos/SKILL.md) | browser login | full | Order Domino's, browse menus, and track deliveries. |
-| [`dub`](library/marketing/dub/) | [`/pp-dub`](plugin/skills/pp-dub/SKILL.md) | API key | full | Create short links, track analytics, and manage domains. |
-| [`espn`](library/media-and-entertainment/espn/) | [`/pp-espn`](plugin/skills/pp-espn/SKILL.md) | none | full | Live scores, standings, schedules, and sports news. |
-| [`flightgoat`](library/travel/flightgoat/) | [`/pp-flightgoat`](plugin/skills/pp-flightgoat/SKILL.md) | API key optional | full | Search flights, explore routes, and track flights. |
-| [`hackernews`](library/media-and-entertainment/hackernews/) | [`/pp-hackernews`](plugin/skills/pp-hackernews/SKILL.md) | none | full | Browse stories, comments, jobs, and topic slices from Hacker News. |
-| [`hubspot-pp-cli`](library/sales-and-crm/hubspot/) | [`/pp-hubspot`](plugin/skills/pp-hubspot/SKILL.md) | API key | full | Work with contacts, companies, deals, tickets, and pipelines. |
-| [`instacart`](library/commerce/instacart/) | [`/pp-instacart`](plugin/skills/pp-instacart/SKILL.md) | browser session | no | Search products, manage carts, and shop Instacart from the terminal. |
-| [`kalshi`](library/payments/kalshi/) | [`/pp-kalshi`](plugin/skills/pp-kalshi/SKILL.md) | API key | full | Trade markets, inspect portfolios, and analyze odds. |
-| [`linear`](library/project-management/linear/) | [`/pp-linear`](plugin/skills/pp-linear/SKILL.md) | API key | full | Manage issues, cycles, teams, and projects with local sync. |
-| [`movie-goat`](library/media-and-entertainment/movie-goat/) | [`/pp-movie-goat`](plugin/skills/pp-movie-goat/SKILL.md) | bearer token | full | Compare movie ratings, streaming availability, and recommendations. |
-| [`pagliacci-pizza`](library/food-and-dining/pagliacci-pizza/) | [`/pp-pagliacci-pizza`](plugin/skills/pp-pagliacci-pizza/SKILL.md) | browser login | partial | Order Pagliacci and browse public menu and store data without login. |
-| [`postman-explore`](library/developer-tools/postman-explore/) | [`/pp-postman-explore`](plugin/skills/pp-postman-explore/SKILL.md) | none | full | Search and browse the Postman API Network. |
-| [`recipe-goat`](library/food-and-dining/recipe-goat/) | [`/pp-recipe-goat`](plugin/skills/pp-recipe-goat/SKILL.md) | API key | full | Find recipes across trusted sites and pull nutrition context. |
-| [`slack`](library/productivity/slack/) | [`/pp-slack`](plugin/skills/pp-slack/SKILL.md) | API key | full | Send messages, search conversations, and monitor channels. |
-| [`steam-web`](library/media-and-entertainment/steam-web/) | [`/pp-steam-web`](plugin/skills/pp-steam-web/SKILL.md) | API key | full | Look up Steam players, games, achievements, and stats. |
-| [`trigger-dev`](library/developer-tools/trigger-dev/) | [`/pp-trigger-dev`](plugin/skills/pp-trigger-dev/SKILL.md) | API key | full | Monitor runs, trigger tasks, and inspect schedules and failures. |
-| [`weather-goat`](library/other/weather-goat/) | [`/pp-weather-goat`](plugin/skills/pp-weather-goat/SKILL.md) | none | full | Forecasts, alerts, air quality, and activity verdicts. |
-| [`yahoo-finance`](library/commerce/yahoo-finance/) | [`/pp-yahoo-finance`](plugin/skills/pp-yahoo-finance/SKILL.md) | none | full | Quotes, charts, fundamentals, options, and watchlists. |
+| [`agent-capture`](library/developer-tools/agent-capture/) | [`/pp-agent-capture`](skills/pp-agent-capture/SKILL.md) | local only | no | Record, screenshot, and convert macOS windows and screens for agent evidence. |
+| [`archive-is`](library/media-and-entertainment/archive-is/) | [`/pp-archive-is`](skills/pp-archive-is/SKILL.md) | none | full | Find and create Archive.today snapshots for URLs. |
+| [`cal-com`](library/productivity/cal-com/) | [`/pp-cal-com`](skills/pp-cal-com/SKILL.md) | API key | full | Manage bookings, schedules, event types, and availability. |
+| [`dominos-pp-cli`](library/commerce/dominos-pp-cli/) | [`/pp-dominos`](skills/pp-dominos/SKILL.md) | browser login | full | Order Domino's, browse menus, and track deliveries. |
+| [`dub`](library/marketing/dub/) | [`/pp-dub`](skills/pp-dub/SKILL.md) | API key | full | Create short links, track analytics, and manage domains. |
+| [`espn`](library/media-and-entertainment/espn/) | [`/pp-espn`](skills/pp-espn/SKILL.md) | none | full | Live scores, standings, schedules, and sports news. |
+| [`flightgoat`](library/travel/flightgoat/) | [`/pp-flightgoat`](skills/pp-flightgoat/SKILL.md) | API key optional | full | Search flights, explore routes, and track flights. |
+| [`hackernews`](library/media-and-entertainment/hackernews/) | [`/pp-hackernews`](skills/pp-hackernews/SKILL.md) | none | full | Browse stories, comments, jobs, and topic slices from Hacker News. |
+| [`hubspot-pp-cli`](library/sales-and-crm/hubspot/) | [`/pp-hubspot`](skills/pp-hubspot/SKILL.md) | API key | full | Work with contacts, companies, deals, tickets, and pipelines. |
+| [`instacart`](library/commerce/instacart/) | [`/pp-instacart`](skills/pp-instacart/SKILL.md) | browser session | no | Search products, manage carts, and shop Instacart from the terminal. |
+| [`kalshi`](library/payments/kalshi/) | [`/pp-kalshi`](skills/pp-kalshi/SKILL.md) | API key | full | Trade markets, inspect portfolios, and analyze odds. |
+| [`linear`](library/project-management/linear/) | [`/pp-linear`](skills/pp-linear/SKILL.md) | API key | full | Manage issues, cycles, teams, and projects with local sync. |
+| [`movie-goat`](library/media-and-entertainment/movie-goat/) | [`/pp-movie-goat`](skills/pp-movie-goat/SKILL.md) | bearer token | full | Compare movie ratings, streaming availability, and recommendations. |
+| [`pagliacci-pizza`](library/food-and-dining/pagliacci-pizza/) | [`/pp-pagliacci-pizza`](skills/pp-pagliacci-pizza/SKILL.md) | browser login | partial | Order Pagliacci and browse public menu and store data without login. |
+| [`postman-explore`](library/developer-tools/postman-explore/) | [`/pp-postman-explore`](skills/pp-postman-explore/SKILL.md) | none | full | Search and browse the Postman API Network. |
+| [`recipe-goat`](library/food-and-dining/recipe-goat/) | [`/pp-recipe-goat`](skills/pp-recipe-goat/SKILL.md) | API key | full | Find recipes across trusted sites and pull nutrition context. |
+| [`slack`](library/productivity/slack/) | [`/pp-slack`](skills/pp-slack/SKILL.md) | API key | full | Send messages, search conversations, and monitor channels. |
+| [`steam-web`](library/media-and-entertainment/steam-web/) | [`/pp-steam-web`](skills/pp-steam-web/SKILL.md) | API key | full | Look up Steam players, games, achievements, and stats. |
+| [`trigger-dev`](library/developer-tools/trigger-dev/) | [`/pp-trigger-dev`](skills/pp-trigger-dev/SKILL.md) | API key | full | Monitor runs, trigger tasks, and inspect schedules and failures. |
+| [`weather-goat`](library/other/weather-goat/) | [`/pp-weather-goat`](skills/pp-weather-goat/SKILL.md) | none | full | Forecasts, alerts, air quality, and activity verdicts. |
+| [`yahoo-finance`](library/commerce/yahoo-finance/) | [`/pp-yahoo-finance`](skills/pp-yahoo-finance/SKILL.md) | none | full | Quotes, charts, fundamentals, options, and watchlists. |
 
 ## Installation Paths
 
@@ -144,12 +145,15 @@ library/
       .printing-press.json
       .manuscripts/
 
-plugin/
-  skills/
-    ppl/
-      SKILL.md
-    pp-*/
-      SKILL.md
+.claude-plugin/
+  marketplace.json
+  plugin.json
+
+skills/
+  ppl/
+    SKILL.md
+  pp-*/
+    SKILL.md
 
 registry.json
 ```

@@ -18,18 +18,19 @@ library/<category>/<cli-slug>/      — one published CLI per directory
   dogfood-results.json              — structural validation output
   workflow-verify-report.json       — runtime verification output
 
-plugin/
-  .claude-plugin/plugin.json        — plugin manifest; `version` bumps patch on changes
-  skills/pp-<slug>/SKILL.md         — generated mirror of library/<…>/SKILL.md (see "Keeping plugin/skills in sync")
-  skills/ppl/                       — the mega-skill across all CLIs
-  commands/pp-<slug>.md             — slash-command shim for each skill (generated); /pp-<slug> in Claude Code
-  commands/ppl.md                   — slash-command shim for the ppl router (hand-authored)
+.claude-plugin/
+  marketplace.json                  — marketplace manifest (declares the plugin at source "./")
+  plugin.json                       — plugin manifest; `version` bumps patch on changes
+skills/pp-<slug>/SKILL.md           — generated mirror of library/<…>/SKILL.md (see "Keeping skills/ in sync")
+skills/ppl/                         — the mega-skill across all CLIs
 
 registry.json                       — top-level catalog: every CLI's name, category, description, path, MCP metadata
-tools/generate-skills/              — regenerates plugin/skills/pp-* and plugin/commands/pp-* from library/ + registry.json
+tools/generate-skills/              — regenerates skills/pp-* from library/ + registry.json
 .github/scripts/verify-skill/       — Python verifier that checks SKILL.md matches shipped Go source
 .github/workflows/                  — CI: verify-skills.yml, generate-skills.yml
 ```
+
+The whole repo IS the plugin — there is no `plugin/` subdir. This matches the idiomatic "whole-repo plugin" convention used by [obra/superpowers](https://github.com/obra/superpowers) and [anthropics/skills](https://github.com/anthropics/skills). `marketplace.json` declares `"source": "./"` rather than the nested `git-subdir` form.
 
 ## Naming conventions
 
@@ -74,13 +75,15 @@ A few older CLIs (e.g. `agent-capture`, `instacart`) use a package-global `var r
 
 ## SKILL.md coverage
 
-As of 2026-04-20, every CLI in `library/` ships a `library/<category>/<slug>/SKILL.md`. The generator (`tools/generate-skills/main.go`) copies each library SKILL.md verbatim to `plugin/skills/pp-<slug>/SKILL.md` and emits a matching slash-command shim at `plugin/commands/pp-<slug>.md`. The verifier (`verify-skills.yml`) runs flag / command / positional-arg checks against every CLI.
+As of 2026-04-20, every CLI in `library/` ships a `library/<category>/<slug>/SKILL.md`. The generator (`tools/generate-skills/main.go`) copies each library SKILL.md verbatim to `skills/pp-<slug>/SKILL.md`. The verifier (`verify-skills.yml`) runs flag / command / positional-arg checks against every CLI.
+
+**No command shims.** Claude Code has merged `commands/` into `skills/` — a skill at `skills/pp-foo/SKILL.md` registers `/pp-foo` directly. Don't re-add a `commands/` directory to work around perceived autocomplete gaps; that's double-registration of the same `/name` namespace. If `/pp-*` doesn't appear in slash autocomplete, check Claude Code version (cf. [#48963](https://github.com/anthropics/claude-code/issues/48963)) rather than adding shims.
 
 When adding a new CLI, ship a library SKILL.md alongside the generated code. Registry-only synthesis still works as a fallback but is strictly worse: agents get no "when to use" guidance, no curated command list, and the trigger-phrase list is generic ("install X, use X, run X") so natural-language matches miss.
 
-## Keeping `plugin/skills/` in sync
+## Keeping `skills/` in sync
 
-`plugin/skills/pp-<slug>/SKILL.md` is a **generated mirror** of `library/<category>/<slug>/SKILL.md`, produced by `tools/generate-skills/main.go`. Any PR that modifies a library SKILL.md or a library CLI's `internal/cli/**` source must also commit the regenerated plugin output.
+`skills/pp-<slug>/SKILL.md` is a **generated mirror** of `library/<category>/<slug>/SKILL.md`, produced by `tools/generate-skills/main.go`. Any PR that modifies a library SKILL.md or a library CLI's `internal/cli/**` source must also commit the regenerated plugin output.
 
 **When you change `library/**/SKILL.md` or `library/**/internal/cli/**`:**
 
@@ -88,16 +91,16 @@ When adding a new CLI, ship a library SKILL.md alongside the generated code. Reg
    ```bash
    go run ./tools/generate-skills/main.go
    ```
-2. Bump `plugin/.claude-plugin/plugin.json` `version` (semver patch, e.g. `1.1.9` → `1.1.10`). The generator's `maybeUpdatePluginVersion` only auto-bumps on directory-set changes (CLI added or removed); **SKILL content changes do not trigger an auto-bump and need a manual edit**.
-3. Commit both the regenerated `plugin/skills/pp-*/SKILL.md` files AND any regenerated `plugin/commands/pp-*.md` shims AND the version bump alongside your library change — ideally in one `chore(plugin): regenerate pp-* skills + bump to X.Y.Z` commit.
+2. Bump `.claude-plugin/plugin.json` `version` (semver patch, e.g. `1.1.9` → `1.1.10`). The generator's `maybeUpdatePluginVersion` only auto-bumps on directory-set changes (CLI added or removed); **SKILL content changes do not trigger an auto-bump and need a manual edit**.
+3. Commit the regenerated `skills/pp-*/SKILL.md` files AND the version bump alongside your library change — ideally in one `chore(plugin): regenerate pp-* skills + bump to X.Y.Z` commit.
 
 **Why the manual step exists:** `.github/workflows/generate-skills.yml` only triggers on changes to `registry.json`, `library/**/.printing-press.json`, or `tools/generate-skills/**`. It does not fire on SKILL.md or `internal/cli/**` changes. Expanding those triggers, plus teaching `maybeUpdatePluginVersion` to bump on content changes, is worth a follow-up; until then, the manual run is the workaround.
 
 ## Marketplace manifest
 
-`.claude-plugin/marketplace.json` declares the plugin as a `git-subdir` source with `path: plugin`. The `source` object MUST include `"ref": "main"` (or another valid branch/tag). On 2026-04-20, an upgrade session left the Claude Code plugin cache empty after a rapid series of `/plugin` updates; the cache path recorded in `installed_plugins.json` pointed at a directory that was never populated, and `/pp` slash autocomplete returned nothing because the plugin files weren't where Claude Code looked. Surveying the official marketplace, 20 of 22 `git-subdir` plugins include `"ref"`. Keeping `ref` in our manifest aligns us with the majority pattern and avoids a class of install-flow failures.
+`.claude-plugin/marketplace.json` declares the plugin with the bare `"source": "./"` form — the whole repo IS the plugin. This matches [obra/superpowers](https://github.com/obra/superpowers) and [anthropics/skills](https://github.com/anthropics/skills).
 
-Do not drop `ref` in future marketplace edits. Adding a `sha` pin is optional; plugins that ship frequent releases typically skip it to avoid per-release bumps.
+Do not switch back to the `git-subdir` form. That was used when `plugin/` was a subdirectory; flattening (2026-04-20) eliminated the need. `ref`/`sha` pinning is not applicable to the bare-string source form.
 
 ## Commit style
 
