@@ -51,6 +51,7 @@ type Report struct {
 	Created      string `json:"created"`
 	LastUpdated  string `json:"last_updated"`
 	ExpenseCount int    `json:"expense_count"`
+	StateNum     int64  `json:"state_num,omitempty"`
 	RawJSON      string `json:"raw_json,omitempty"`
 	SyncedAt     string `json:"synced_at,omitempty"`
 }
@@ -221,6 +222,20 @@ func (s *Store) Migrate() error {
 			return fmt.Errorf("migrate: %w (stmt: %.80s)", err, q)
 		}
 	}
+
+	// Idempotent column additions. SQLite has no IF NOT EXISTS for columns,
+	// so we attempt each ADD COLUMN and swallow "duplicate column name" errors.
+	addColumns := []string{
+		`ALTER TABLE reports ADD COLUMN state_num INTEGER DEFAULT NULL`,
+	}
+	for _, q := range addColumns {
+		if _, err := s.DB.Exec(q); err != nil {
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
+			return fmt.Errorf("migrate add column: %w (stmt: %.80s)", err, q)
+		}
+	}
 	return nil
 }
 
@@ -288,11 +303,17 @@ func (s *Store) UpsertExpense(e Expense) error {
 // UpsertReport inserts or updates a single report.
 func (s *Store) UpsertReport(r Report) error {
 	now := time.Now().UTC().Format(time.RFC3339)
+	// state_num is nullable: store NULL for unknown/zero so downstream queries
+	// can distinguish "stateNum not present on synced row" from "stateNum 0".
+	var stateNum any
+	if r.StateNum != 0 {
+		stateNum = r.StateNum
+	}
 	_, err := s.DB.Exec(`
 		INSERT INTO reports (
 			report_id, policy_id, title, status, total, currency,
-			created, last_updated, expense_count, raw_json, synced_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			created, last_updated, expense_count, state_num, raw_json, synced_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(report_id) DO UPDATE SET
 			policy_id=excluded.policy_id,
 			title=excluded.title,
@@ -302,10 +323,11 @@ func (s *Store) UpsertReport(r Report) error {
 			created=excluded.created,
 			last_updated=excluded.last_updated,
 			expense_count=excluded.expense_count,
+			state_num=excluded.state_num,
 			raw_json=excluded.raw_json,
 			synced_at=excluded.synced_at
 	`, r.ReportID, r.PolicyID, r.Title, r.Status, r.Total, r.Currency,
-		r.Created, r.LastUpdated, r.ExpenseCount, r.RawJSON, now)
+		r.Created, r.LastUpdated, r.ExpenseCount, stateNum, r.RawJSON, now)
 	return err
 }
 
@@ -831,7 +853,7 @@ func (s *Store) LastCategoryForMerchant(merchant string) (string, error) {
 // ListReports returns all reports in the local store, optionally filtered.
 // Supported filter keys: policy_id, status.
 func (s *Store) ListReports(filters map[string]string) ([]Report, error) {
-	query := `SELECT report_id, policy_id, title, status, total, currency, created, last_updated, expense_count, raw_json, synced_at FROM reports`
+	query := `SELECT report_id, policy_id, title, status, total, currency, created, last_updated, expense_count, state_num, raw_json, synced_at FROM reports`
 	var where []string
 	var args []any
 	if v, ok := filters["policy_id"]; ok && v != "" {
@@ -854,8 +876,12 @@ func (s *Store) ListReports(filters map[string]string) ([]Report, error) {
 	var out []Report
 	for rows.Next() {
 		var r Report
-		if err := rows.Scan(&r.ReportID, &r.PolicyID, &r.Title, &r.Status, &r.Total, &r.Currency, &r.Created, &r.LastUpdated, &r.ExpenseCount, &r.RawJSON, &r.SyncedAt); err != nil {
+		var stateNum sql.NullInt64
+		if err := rows.Scan(&r.ReportID, &r.PolicyID, &r.Title, &r.Status, &r.Total, &r.Currency, &r.Created, &r.LastUpdated, &r.ExpenseCount, &stateNum, &r.RawJSON, &r.SyncedAt); err != nil {
 			return nil, err
+		}
+		if stateNum.Valid {
+			r.StateNum = stateNum.Int64
 		}
 		out = append(out, r)
 	}

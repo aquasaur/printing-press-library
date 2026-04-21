@@ -8,23 +8,42 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/mvanhorn/printing-press-library/library/productivity/expensify/internal/config"
+	"github.com/mvanhorn/printing-press-library/library/productivity/expensify/internal/expensifysearch"
 	"github.com/mvanhorn/printing-press-library/library/productivity/expensify/internal/store"
 
 	"github.com/spf13/cobra"
 )
 
+// maxHistoryMonths caps the --history-months flag. Expensify's /Search DSL
+// accepts `last-N-months` tokens but rejects values >24 in practice, so we
+// clamp client-side and warn to stderr rather than letting the request fail.
+const maxHistoryMonths = 24
+
+// historyReportTypes is the allowlist for /Search historical report entries.
+// Expensify's snapshot may also contain chat / task / policyExpenseChat /
+// policyAnnounce entries under report_* keys — we skip those.
+var historyReportTypes = map[string]bool{
+	"iou":            true,
+	"expenseReport":  true,
+	"expense-report": true,
+}
+
 func newSyncCmd(flags *rootFlags) *cobra.Command {
 	var syncAll bool
 	var sinceDate, policyID string
+	var historyMonths int
+	var noHistory bool
 	cmd := &cobra.Command{
 		Use:     "sync",
 		Short:   "Pull reports, expenses, and workspaces from Expensify into the local store",
-		Example: "  expensify-pp-cli sync\n  expensify-pp-cli sync --since 2026-01-01",
+		Example: "  expensify-pp-cli sync\n  expensify-pp-cli sync --since 2026-01-01\n  expensify-pp-cli sync --history-months 6\n  expensify-pp-cli sync --no-history",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := flags.newClient()
 			if err != nil {
@@ -56,16 +75,179 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 
 			nReports, nExpenses, nWorkspaces, nPeople := ingestReconnectApp(st, data, sinceDate, policyID, c.Config)
 
-			fmt.Fprintf(cmd.OutOrStdout(),
-				"Synced %d reports, %d expenses, %d workspaces, %d people from Expensify.\n",
-				nReports, nExpenses, nWorkspaces, nPeople)
+			// Historical report pass. ReconnectApp returns only the current
+			// active report snapshot; /Search pulls paid/archived reports.
+			var nHistorical int
+			if !noHistory {
+				months := clampHistoryMonths(historyMonths, os.Stderr)
+				doSearch := func(q expensifysearch.Query) (*expensifysearch.Response, error) {
+					return c.Search(q)
+				}
+				n, herr := runHistoricalFetch(st, doSearch, months)
+				if herr != nil {
+					// ReconnectApp already committed; historical fetch is
+					// additive. Log to stderr and exit 0 for partial success.
+					fmt.Fprintf(os.Stderr, "sync: historical fetch failed: %v\n", herr)
+				}
+				nHistorical = n
+			}
+
+			if nHistorical > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(),
+					"Synced %d reports (%d historical), %d expenses, %d workspaces, %d people from Expensify.\n",
+					nReports, nHistorical, nExpenses, nWorkspaces, nPeople)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(),
+					"Synced %d reports, %d expenses, %d workspaces, %d people from Expensify.\n",
+					nReports, nExpenses, nWorkspaces, nPeople)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&syncAll, "all", false, "Full sync (accepted for parity; ReconnectApp already returns full state)")
 	cmd.Flags().StringVar(&sinceDate, "since", "", "Only upsert expenses dated on/after this YYYY-MM-DD")
 	cmd.Flags().StringVar(&policyID, "policy", "", "Only upsert rows for this policy ID")
+	cmd.Flags().IntVar(&historyMonths, "history-months", 12, "Months of report history to pull via /Search (max 24)")
+	cmd.Flags().BoolVar(&noHistory, "no-history", false, "Skip the /Search historical pass (ReconnectApp only)")
 	return cmd
+}
+
+// clampHistoryMonths bounds the --history-months flag to [1, maxHistoryMonths].
+// Writes a warning to w when the original value is out of range. Returns the
+// clamped value the caller should use when building the Search query.
+func clampHistoryMonths(months int, w io.Writer) int {
+	if months <= 0 {
+		fmt.Fprintf(w, "sync: --history-months %d invalid; using 12\n", months)
+		return 12
+	}
+	if months > maxHistoryMonths {
+		fmt.Fprintf(w, "sync: --history-months %d exceeds max %d; clamping to %d\n", months, maxHistoryMonths, maxHistoryMonths)
+		return maxHistoryMonths
+	}
+	return months
+}
+
+// runHistoricalFetch issues a /Search call via doSearch for the last N months
+// of `type:expense-report` data and upserts only real expense reports into st.
+// Returns the count of historical rows upserted and any error from the Search
+// call. The error is returned verbatim so callers can classify SearchError
+// vs network errors; a non-nil error does NOT prevent previously-committed
+// ReconnectApp rows from remaining in the store.
+func runHistoricalFetch(st *store.Store, doSearch func(expensifysearch.Query) (*expensifysearch.Response, error), monthsN int) (int, error) {
+	if st == nil || doSearch == nil {
+		return 0, nil
+	}
+	q := expensifysearch.Query{
+		Type:                  "expense-report",
+		Filters:               expensifysearch.Eq("date", fmt.Sprintf("last-%d-months", monthsN)),
+		SortBy:                "date",
+		SortOrder:             "desc",
+		View:                  "table",
+		Hash:                  rand.Intn(1<<31-1) + 1,
+		ShouldCalculateTotals: true,
+	}
+	resp, err := doSearch(q)
+	if err != nil {
+		return 0, err
+	}
+	return ingestHistoricalSearch(st, resp), nil
+}
+
+// ingestHistoricalSearch walks a /Search response and upserts only real
+// expense reports (filtering out chat / task / policyExpenseChat entries that
+// the snapshot may also carry under report_* keys).
+func ingestHistoricalSearch(st *store.Store, resp *expensifysearch.Response) int {
+	if st == nil || resp == nil {
+		return 0
+	}
+	count := 0
+	for _, entry := range resp.OnyxData {
+		if len(entry.Value) == 0 {
+			continue
+		}
+		var val any
+		if err := json.Unmarshal(entry.Value, &val); err != nil {
+			continue
+		}
+		inner := unwrapSnapshotData(val)
+		count += walkHistoricalReports(st, entry.Key, inner)
+	}
+	return count
+}
+
+// walkHistoricalReports iterates the inner `data` map of a snapshot entry
+// (or any direct report_* map) and upserts each child that passes the
+// isExpenseReport allowlist.
+func walkHistoricalReports(st *store.Store, key string, inner any) int {
+	count := 0
+	m, ok := inner.(map[string]any)
+	if !ok {
+		return 0
+	}
+	// snapshot_<hash> wraps { report_X: {...}, transactions_Y: {...} }.
+	// reports / report_<id> entries may also arrive directly (non-snapshot).
+	if strings.HasPrefix(key, "report_") || key == "reports" {
+		// The entry's value IS the report row itself (rare) — walk one.
+		if isExpenseReport(m) {
+			count += upsertHistoricalReport(st, m)
+		}
+		// Also handle the "id -> report" map shape.
+		for _, child := range m {
+			if row, ok := child.(map[string]any); ok && isExpenseReport(row) {
+				count += upsertHistoricalReport(st, row)
+			}
+		}
+		return count
+	}
+	// snapshot_* and everything else: iterate children looking for report_* keys.
+	for k, child := range m {
+		if !strings.HasPrefix(k, "report_") {
+			continue
+		}
+		row, ok := child.(map[string]any)
+		if !ok {
+			continue
+		}
+		if !isExpenseReport(row) {
+			continue
+		}
+		count += upsertHistoricalReport(st, row)
+	}
+	return count
+}
+
+// upsertHistoricalReport runs the shared reportFromMap translation and
+// upserts. Returns 1 on success, 0 otherwise.
+func upsertHistoricalReport(st *store.Store, row map[string]any) int {
+	r := reportFromMap(row)
+	if r.ReportID == "" {
+		return 0
+	}
+	if err := st.UpsertReport(r); err != nil {
+		fmt.Fprintf(os.Stderr, "sync: upsert historical report %s: %v\n", r.ReportID, err)
+		return 0
+	}
+	return 1
+}
+
+// isExpenseReport reports whether a raw report map is a real expense report
+// (and not a chat / task / onboarding / policyExpenseChat snapshot entry).
+// Allowlist: type ∈ {iou, expenseReport, expense-report}. Defensive fallback:
+// when type is missing AND the row has a non-empty reportName AND stateNum is
+// present, treat it as a real report — some snapshot entries omit type.
+func isExpenseReport(m map[string]any) bool {
+	typ := strings.TrimSpace(firstString(m, "type"))
+	if typ != "" {
+		return historyReportTypes[typ]
+	}
+	// Fallback: non-empty reportName + stateNum present.
+	if firstString(m, "reportName", "title", "name") == "" {
+		return false
+	}
+	if _, has := m["stateNum"]; !has {
+		return false
+	}
+	return true
 }
 
 // ingestReconnectApp parses the response blob from /ReconnectApp and upserts
@@ -317,6 +499,7 @@ func reportFromMap(m map[string]any) store.Report {
 		Created:      firstString(m, "created", "lastActionCreated"),
 		LastUpdated:  firstString(m, "lastModified", "lastUpdatedTime"),
 		ExpenseCount: int(firstInt64(m, "transactionCount", "expenseCount")),
+		StateNum:     firstInt64(m, "stateNum", "statusNum"),
 		RawJSON:      string(raw),
 	}
 }
