@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mvanhorn/printing-press-library/library/productivity/expensify/internal/config"
+	"github.com/mvanhorn/printing-press-library/library/productivity/expensify/internal/credentials"
 
 	"github.com/spf13/cobra"
 )
@@ -52,14 +54,63 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 				}
 			}
 
+			// Session staleness: derived purely from LastLoginAt + threshold,
+			// no network call. Computed BEFORE the credentials probe so the
+			// report map carries both values; if the probe later flags 407
+			// we suppress the staleness line to avoid double-reporting.
+			credsConfigured := false
+			if cfg != nil && cfg.ExpensifyEmail != "" && credentials.Has(cfg.ExpensifyEmail) {
+				credsConfigured = true
+			}
+			threshold := stalenessThreshold()
+			now := time.Now().UTC()
+			if cfg != nil && cfg.HasSessionAuth() {
+				bucket := classifyStaleness(cfg.LastLoginAt, now, threshold)
+				switch bucket {
+				case staleUnknown:
+					report["staleness"] = "Token age: unknown (no login timestamp recorded — token set via auth set-token?)"
+					report["staleness_level"] = "INFO"
+				case staleFresh:
+					age := now.Sub(cfg.LastLoginAt)
+					report["staleness"] = fmt.Sprintf("Token age: %s (fresh)", humanizeDuration(age))
+					report["staleness_level"] = "OK"
+				case staleStale:
+					age := now.Sub(cfg.LastLoginAt)
+					hint := stalenessHint(credsConfigured)
+					report["staleness"] = fmt.Sprintf("Token age: %s (>= %s stale). %s", humanizeDuration(age), humanizeDuration(threshold), hint)
+					report["staleness_level"] = "WARN"
+				case stalePossiblyExpired:
+					age := now.Sub(cfg.LastLoginAt)
+					hint := stalenessHint(credsConfigured)
+					report["staleness"] = fmt.Sprintf("Token age: %s (>= %s possibly expired). %s", humanizeDuration(age), humanizeDuration(2*threshold), hint)
+					report["staleness_level"] = "ERROR"
+				}
+			}
+
 			// Session validation: try OpenPublicProfile if a session token is configured.
+			sessionExpired := false
 			if cfg != nil && cfg.HasSessionAuth() {
 				c, cerr := flags.newClient()
 				if cerr != nil {
 					report["credentials"] = fmt.Sprintf("skipped: %v", cerr)
 				} else {
 					data, status, perr := c.Post("/OpenInitialSettingsPage", map[string]any{})
+					// Expensify's dispatcher returns HTTP 200 with jsonCode:407
+					// on session expiry — peek at the body to detect that even
+					// when auto-retry is disabled and no error surfaced.
+					bodyExpired := perr == nil && hasExpiredJSONCode(data)
+					errMsg := ""
+					if perr != nil {
+						errMsg = perr.Error()
+					}
 					switch {
+					case bodyExpired || status == 403 || status == 407 || strings.Contains(errMsg, "HTTP 403") || strings.Contains(errMsg, "jsonCode 407") || strings.Contains(errMsg, "auto-retry exhausted"):
+						sessionExpired = true
+						if credsConfigured {
+							report["credentials"] = "Session expired — run `auth login --headless` (stored credentials available) or `auth login`"
+						} else {
+							report["credentials"] = "Session expired — run `auth login --headless` after `auth store-credentials`, or `auth login` (headed)"
+						}
 					case perr == nil && status >= 200 && status < 300:
 						// Try to extract email/displayName from response
 						email := extractEmail(data)
@@ -68,14 +119,20 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 						} else {
 							report["credentials"] = "Session valid"
 						}
-					case status == 403 || status == 407 || strings.Contains(fmt.Sprintf("%v", perr), "HTTP 403"):
-						report["credentials"] = "Session expired — run `auth login` again"
 					case perr != nil:
 						report["credentials"] = fmt.Sprintf("API error: %v", perr)
 					default:
 						report["credentials"] = fmt.Sprintf("HTTP %d", status)
 					}
 				}
+			}
+
+			// If the live probe already flagged the session as expired, drop
+			// the staleness line so the user sees one canonical ERROR rather
+			// than an ERROR + a redundant WARN pointing at the same issue.
+			if sessionExpired {
+				delete(report, "staleness")
+				delete(report, "staleness_level")
 			}
 
 			report["version"] = version
@@ -90,6 +147,7 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 				{"auth", "Auth"},
 				{"session_auth", "Session"},
 				{"partner_auth", "Partner"},
+				{"staleness", "Staleness"},
 				{"credentials", "Credentials"},
 			}
 			for _, k := range keys {
@@ -99,11 +157,26 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 				}
 				s := fmt.Sprintf("%v", v)
 				indicator := green("OK")
-				switch {
-				case strings.Contains(s, "error") || strings.Contains(s, "expired") || strings.Contains(s, "unreachable"):
-					indicator = red("FAIL")
-				case strings.Contains(s, "not configured") || strings.Contains(s, "skipped"):
-					indicator = yellow("WARN")
+				// Staleness carries an explicit level key so the human
+				// rendering doesn't have to parse the message string.
+				if k.key == "staleness" {
+					switch report["staleness_level"] {
+					case "ERROR":
+						indicator = red("FAIL")
+					case "WARN":
+						indicator = yellow("WARN")
+					case "INFO":
+						indicator = yellow("INFO")
+					default:
+						indicator = green("OK")
+					}
+				} else {
+					switch {
+					case strings.Contains(s, "error") || strings.Contains(s, "expired") || strings.Contains(s, "unreachable"):
+						indicator = red("FAIL")
+					case strings.Contains(s, "not configured") || strings.Contains(s, "skipped"):
+						indicator = yellow("WARN")
+					}
 				}
 				fmt.Fprintf(w, "  %s %s: %s\n", indicator, k.label, s)
 			}
@@ -119,6 +192,35 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// hasExpiredJSONCode peeks at a doctor-probe response body for the
+// dispatcher's session-expired envelope. Expensify returns HTTP 200 with
+// `{"jsonCode":407}` when the token is stale; we need to catch that here
+// because auto-retry may be disabled (CI, --no-auto-retry, or keychain-less
+// environments) and the client.do() call returns nil error in that case.
+func hasExpiredJSONCode(data json.RawMessage) bool {
+	if len(data) == 0 {
+		return false
+	}
+	var env struct {
+		JSONCode int `json:"jsonCode"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		return false
+	}
+	return env.JSONCode == 407
+}
+
+// stalenessHint picks the remediation sentence for the Staleness line based on
+// whether the user has headless credentials configured. The branch is the
+// single difference between the two WARN messages in the plan, so keeping it
+// here avoids two near-duplicate format strings.
+func stalenessHint(credsConfigured bool) string {
+	if credsConfigured {
+		return "Run `auth login --headless` or let auto-retry refresh on next call."
+	}
+	return "Run `auth login` (headed) or configure headless via `auth store-credentials` + `auth login --headless`."
 }
 
 // extractEmail digs through an OpenPublicProfile response for the logged-in

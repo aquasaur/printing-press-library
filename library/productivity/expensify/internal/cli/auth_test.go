@@ -9,6 +9,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -355,4 +356,194 @@ func TestAuthLogin_Headless_InvalidCreds(t *testing.T) {
 	if ce.code != 4 {
 		t.Fatalf("exit code = %d, want 4 (auth)", ce.code)
 	}
+}
+
+// seedAuthStatusConfig writes a session token + LastLoginAt directly via
+// config.save() (through SaveAccountID), bypassing SaveSessionToken which
+// would stamp the current time. The caller owns LastLoginAt so tests can
+// simulate fresh / stale / expired states deterministically.
+func seedAuthStatusConfig(t *testing.T, path string, lastLogin time.Time) {
+	t.Helper()
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	cfg.ExpensifyAuthToken = "stub-auth-token-for-status-tests"
+	cfg.LastLoginAt = lastLogin
+	// SaveAccountID(0) is a no-op on the accountID but commits the file,
+	// giving us a written-to-disk config whose LastLoginAt is the value the
+	// test asked for (SaveSessionToken would clobber it with time.Now()).
+	if err := cfg.SaveAccountID(cfg.ExpensifyAccountID); err != nil {
+		t.Fatalf("SaveAccountID: %v", err)
+	}
+}
+
+// TestAuthStatus_Fresh: 10m-old LastLoginAt → "Token age: 10m" + status fresh.
+func TestAuthStatus_Fresh(t *testing.T) {
+	flags := newAuthTestFlags(t)
+	seedAuthStatusConfig(t, flags.configPath, time.Now().Add(-10*time.Minute).UTC())
+
+	out, err := runAuthCmd(t, flags, "status")
+	if err != nil {
+		t.Fatalf("status: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Token age: 10m") {
+		t.Fatalf("missing 'Token age: 10m'; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Token status: fresh") {
+		t.Fatalf("missing 'Token status: fresh'; got:\n%s", out)
+	}
+}
+
+// TestAuthStatus_Stale: 90m-old LastLoginAt → "Token age: 1h30m" + stale.
+func TestAuthStatus_Stale(t *testing.T) {
+	flags := newAuthTestFlags(t)
+	seedAuthStatusConfig(t, flags.configPath, time.Now().Add(-90*time.Minute).UTC())
+
+	out, err := runAuthCmd(t, flags, "status")
+	if err != nil {
+		t.Fatalf("status: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Token age: 1h30m") {
+		t.Fatalf("missing 'Token age: 1h30m'; got:\n%s", out)
+	}
+	if !strings.Contains(out, "stale") {
+		t.Fatalf("missing 'stale' marker; got:\n%s", out)
+	}
+}
+
+// TestAuthStatus_PossiblyExpired: 150m-old LastLoginAt → "possibly expired".
+func TestAuthStatus_PossiblyExpired(t *testing.T) {
+	flags := newAuthTestFlags(t)
+	seedAuthStatusConfig(t, flags.configPath, time.Now().Add(-150*time.Minute).UTC())
+
+	out, err := runAuthCmd(t, flags, "status")
+	if err != nil {
+		t.Fatalf("status: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "possibly expired") {
+		t.Fatalf("missing 'possibly expired'; got:\n%s", out)
+	}
+}
+
+// TestAuthStatus_ZeroLastLogin: zero-value LastLoginAt → "Token age: unknown".
+func TestAuthStatus_ZeroLastLogin(t *testing.T) {
+	flags := newAuthTestFlags(t)
+	seedAuthStatusConfig(t, flags.configPath, time.Time{})
+
+	out, err := runAuthCmd(t, flags, "status")
+	if err != nil {
+		t.Fatalf("status: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Token age: unknown") {
+		t.Fatalf("missing 'Token age: unknown'; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Last login: never") {
+		t.Fatalf("missing 'Last login: never'; got:\n%s", out)
+	}
+}
+
+// TestAuthStatus_CustomThreshold: EXPENSIFY_TOKEN_STALE_AFTER=30 with a
+// 45-minute-old token → classified stale (since 45 > 30).
+func TestAuthStatus_CustomThreshold(t *testing.T) {
+	t.Setenv("EXPENSIFY_TOKEN_STALE_AFTER", "30")
+	flags := newAuthTestFlags(t)
+	seedAuthStatusConfig(t, flags.configPath, time.Now().Add(-45*time.Minute).UTC())
+
+	out, err := runAuthCmd(t, flags, "status")
+	if err != nil {
+		t.Fatalf("status: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "stale") {
+		t.Fatalf("45m-old token with 30m threshold should be stale; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Token age: 45m") {
+		t.Fatalf("missing 'Token age: 45m'; got:\n%s", out)
+	}
+}
+
+// TestAuthStatus_JSON: --json emits an object with every documented field.
+func TestAuthStatus_JSON(t *testing.T) {
+	flags := newAuthTestFlags(t)
+	flags.asJSON = true
+	seedAuthStatusConfig(t, flags.configPath, time.Now().Add(-10*time.Minute).UTC())
+
+	out, err := runAuthCmd(t, flags, "status")
+	if err != nil {
+		t.Fatalf("status --json: %v\n%s", err, out)
+	}
+
+	var payload map[string]any
+	if jerr := json.Unmarshal([]byte(out), &payload); jerr != nil {
+		t.Fatalf("unmarshal JSON output: %v\nout: %s", jerr, out)
+	}
+
+	requiredKeys := []string{
+		"token_age_seconds",
+		"stale_threshold_seconds",
+		"is_stale",
+		"last_login",
+		"email_configured",
+		"headless_credentials_configured",
+		"authenticated",
+		"session_token_configured",
+		"partner_credentials_configured",
+		"token_status",
+		"config_path",
+		"base_url",
+		"version",
+	}
+	for _, k := range requiredKeys {
+		if _, ok := payload[k]; !ok {
+			t.Errorf("JSON output missing key %q; got keys: %v", k, keysOf(payload))
+		}
+	}
+	if got, _ := payload["is_stale"].(bool); got {
+		t.Errorf("is_stale=true for a 10m-old token; want false")
+	}
+	if got, _ := payload["token_age_seconds"].(float64); got < 500 || got > 700 {
+		t.Errorf("token_age_seconds = %v, want ~600 (10 minutes)", got)
+	}
+	if got, _ := payload["stale_threshold_seconds"].(float64); got != 3600 {
+		t.Errorf("stale_threshold_seconds = %v, want 3600 (60m default)", got)
+	}
+	if got, _ := payload["email_configured"].(bool); got {
+		t.Errorf("email_configured = true, want false (no email seeded)")
+	}
+	if got, _ := payload["headless_credentials_configured"].(bool); got {
+		t.Errorf("headless_credentials_configured = true, want false")
+	}
+}
+
+// TestAuthStatus_JSON_ZeroLastLogin: token_age_seconds + last_login should be
+// null when LastLoginAt is zero-value so agents can distinguish "no record"
+// from "zero seconds old".
+func TestAuthStatus_JSON_ZeroLastLogin(t *testing.T) {
+	flags := newAuthTestFlags(t)
+	flags.asJSON = true
+	seedAuthStatusConfig(t, flags.configPath, time.Time{})
+
+	out, err := runAuthCmd(t, flags, "status")
+	if err != nil {
+		t.Fatalf("status --json: %v\n%s", err, out)
+	}
+	var payload map[string]any
+	if jerr := json.Unmarshal([]byte(out), &payload); jerr != nil {
+		t.Fatalf("unmarshal: %v", jerr)
+	}
+	if v, ok := payload["token_age_seconds"]; !ok || v != nil {
+		t.Fatalf("token_age_seconds = %v, want nil", v)
+	}
+	if v, ok := payload["last_login"]; !ok || v != nil {
+		t.Fatalf("last_login = %v, want nil", v)
+	}
+}
+
+// keysOf returns the sorted keys of a map[string]any for diagnostics.
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

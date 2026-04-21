@@ -50,21 +50,113 @@ func newAuthStatusCmd(flags *rootFlags) *cobra.Command {
 			}
 			w := cmd.OutOrStdout()
 
+			// Derive the staleness context once; both the text and JSON
+			// branches consume the same values so "stale" in the human line
+			// matches "is_stale" in the JSON blob.
+			now := time.Now().UTC()
+			threshold := stalenessThreshold()
+			emailConfigured := cfg.ExpensifyEmail != ""
+			headlessConfigured := emailConfigured && credentials.Has(cfg.ExpensifyEmail)
+			bucket := classifyStaleness(cfg.LastLoginAt, now, threshold)
+
+			// Compose age + status strings in one place so the two render
+			// paths can't drift.
+			var ageText, statusText string
+			var ageSeconds int64 = -1
+			var lastLoginISO string
+			switch bucket {
+			case staleUnknown:
+				ageText = "unknown (LastLoginAt not set)"
+				statusText = "unknown"
+			default:
+				age := now.Sub(cfg.LastLoginAt)
+				ageText = humanizeDuration(age)
+				ageSeconds = int64(age / time.Second)
+				lastLoginISO = cfg.LastLoginAt.UTC().Format(time.RFC3339)
+				switch bucket {
+				case staleFresh:
+					statusText = "fresh"
+				case staleStale:
+					statusText = fmt.Sprintf("stale (> %s)", humanizeDuration(threshold))
+				case stalePossiblyExpired:
+					statusText = fmt.Sprintf("possibly expired (> %s)", humanizeDuration(2*threshold))
+				}
+			}
+
+			// --json: emit a structured object so agents can parse without
+			// scraping the human-formatted lines. Keep the preexisting
+			// semantic fields (authenticated, session/partner presence) plus
+			// every new Unit-4 field documented in the plan.
+			if flags.asJSON {
+				authenticated := cfg.HasSessionAuth() || cfg.HasPartnerAuth()
+				payload := map[string]any{
+					"authenticated":                    authenticated,
+					"session_token_configured":         cfg.HasSessionAuth(),
+					"partner_credentials_configured":   cfg.HasPartnerAuth(),
+					"email_configured":                 emailConfigured,
+					"headless_credentials_configured":  headlessConfigured,
+					"token_status":                     statusText,
+					"is_stale":                         bucket == staleStale || bucket == stalePossiblyExpired,
+					"stale_threshold_seconds":          int64(threshold / time.Second),
+					"config_path":                      cfg.Path,
+					"base_url":                         cfg.BaseURL,
+					"version":                          version,
+				}
+				if emailConfigured {
+					payload["email"] = cfg.ExpensifyEmail
+				}
+				if cfg.HasSessionAuth() {
+					payload["session_token_length"] = len(cfg.ExpensifyAuthToken)
+				}
+				if cfg.AuthSource != "" {
+					payload["auth_source"] = cfg.AuthSource
+				}
+				// token_age_seconds and last_login are nil when LastLoginAt
+				// is zero; Go's JSON encoder emits the key with null so
+				// consumers can distinguish "no login recorded" from "zero
+				// seconds old".
+				if ageSeconds >= 0 {
+					payload["token_age_seconds"] = ageSeconds
+					payload["last_login"] = lastLoginISO
+				} else {
+					payload["token_age_seconds"] = nil
+					payload["last_login"] = nil
+				}
+				if !authenticated {
+					// Preserve the non-zero exit on "not authenticated" even
+					// when --json is passed, so scripts can `|| exit`.
+					if err := json.NewEncoder(w).Encode(payload); err != nil {
+						return err
+					}
+					return authErr(fmt.Errorf("no credentials configured"))
+				}
+				return json.NewEncoder(w).Encode(payload)
+			}
+
 			// Compose the email + headless-credentials lines once so both the
 			// authenticated and not-authenticated branches show them.
 			emailLine := "  Email: not configured"
-			if cfg.ExpensifyEmail != "" {
+			if emailConfigured {
 				emailLine = fmt.Sprintf("  Email: %s", cfg.ExpensifyEmail)
 			}
 			credsLine := "  Headless credentials: not configured"
-			if cfg.ExpensifyEmail != "" && credentials.Has(cfg.ExpensifyEmail) {
+			if headlessConfigured {
 				credsLine = "  Headless credentials: configured"
+			}
+			ageLine := fmt.Sprintf("  Token age: %s", ageText)
+			statusLine := fmt.Sprintf("  Token status: %s", statusText)
+			lastLoginLine := "  Last login: never"
+			if lastLoginISO != "" {
+				lastLoginLine = fmt.Sprintf("  Last login: %s", lastLoginISO)
 			}
 
 			if !cfg.HasSessionAuth() && !cfg.HasPartnerAuth() {
 				fmt.Fprintln(w, red("Not authenticated"))
 				fmt.Fprintln(w, emailLine)
 				fmt.Fprintln(w, credsLine)
+				fmt.Fprintln(w, ageLine)
+				fmt.Fprintln(w, statusLine)
+				fmt.Fprintln(w, lastLoginLine)
 				fmt.Fprintln(w, "")
 				fmt.Fprintln(w, "Log in with a headed browser:")
 				fmt.Fprintln(w, "  expensify-pp-cli auth login")
@@ -85,6 +177,9 @@ func newAuthStatusCmd(flags *rootFlags) *cobra.Command {
 			}
 			fmt.Fprintln(w, emailLine)
 			fmt.Fprintln(w, credsLine)
+			fmt.Fprintln(w, ageLine)
+			fmt.Fprintln(w, statusLine)
+			fmt.Fprintln(w, lastLoginLine)
 			if cfg.AuthSource != "" {
 				fmt.Fprintf(w, "  Source: %s\n", cfg.AuthSource)
 			}
