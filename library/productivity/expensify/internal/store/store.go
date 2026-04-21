@@ -66,6 +66,16 @@ type Workspace struct {
 	SyncedAt   string `json:"synced_at,omitempty"`
 }
 
+// Person represents a directory entry synced from /ReconnectApp's
+// personalDetailsList. Used to resolve accountIDs to display names.
+type Person struct {
+	AccountID   int64  `json:"account_id"`
+	DisplayName string `json:"display_name"`
+	Login       string `json:"login"`
+	Avatar      string `json:"avatar"`
+	SyncedAt    string `json:"synced_at,omitempty"`
+}
+
 // Category row.
 type Category struct {
 	PolicyID string `json:"policy_id"`
@@ -162,6 +172,13 @@ func (s *Store) Migrate() error {
 			owner_email TEXT,
 			raw_json    TEXT,
 			synced_at   TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS people (
+			account_id   INTEGER PRIMARY KEY,
+			display_name TEXT,
+			login        TEXT,
+			avatar       TEXT,
+			synced_at    TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS categories (
 			policy_id TEXT,
@@ -307,6 +324,61 @@ func (s *Store) UpsertWorkspace(w Workspace) error {
 			synced_at=excluded.synced_at
 	`, w.ID, w.Name, w.Type, w.Role, w.OwnerEmail, w.RawJSON, now)
 	return err
+}
+
+// UpsertPerson inserts or updates a person row keyed by accountID.
+func (s *Store) UpsertPerson(p Person) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.DB.Exec(`
+		INSERT INTO people (account_id, display_name, login, avatar, synced_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(account_id) DO UPDATE SET
+			display_name=excluded.display_name,
+			login=excluded.login,
+			avatar=excluded.avatar,
+			synced_at=excluded.synced_at
+	`, p.AccountID, p.DisplayName, p.Login, p.Avatar, now)
+	return err
+}
+
+// ListPeople returns all people in the local store, ordered by display name.
+func (s *Store) ListPeople() ([]Person, error) {
+	rows, err := s.DB.Query(`SELECT account_id, display_name, login, avatar, synced_at FROM people ORDER BY display_name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Person
+	for rows.Next() {
+		var p Person
+		if err := rows.Scan(&p.AccountID, &p.DisplayName, &p.Login, &p.Avatar, &p.SyncedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// GetPersonByAccountID returns a person row by accountID, or (nil, sql.ErrNoRows)
+// on miss. Callers can use errors.Is(err, sql.ErrNoRows) to detect the miss.
+func (s *Store) GetPersonByAccountID(id int64) (*Person, error) {
+	row := s.DB.QueryRow(`SELECT account_id, display_name, login, avatar, synced_at FROM people WHERE account_id = ?`, id)
+	var p Person
+	if err := row.Scan(&p.AccountID, &p.DisplayName, &p.Login, &p.Avatar, &p.SyncedAt); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetPersonByLogin returns a person row by login (case-insensitive), or
+// (nil, sql.ErrNoRows) on miss.
+func (s *Store) GetPersonByLogin(login string) (*Person, error) {
+	row := s.DB.QueryRow(`SELECT account_id, display_name, login, avatar, synced_at FROM people WHERE LOWER(login) = LOWER(?)`, login)
+	var p Person
+	if err := row.Scan(&p.AccountID, &p.DisplayName, &p.Login, &p.Avatar, &p.SyncedAt); err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 // UpsertCategory inserts or updates a category.

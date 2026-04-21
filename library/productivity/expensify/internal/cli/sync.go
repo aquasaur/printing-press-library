@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
+	"github.com/mvanhorn/printing-press-library/library/productivity/expensify/internal/config"
 	"github.com/mvanhorn/printing-press-library/library/productivity/expensify/internal/store"
 
 	"github.com/spf13/cobra"
@@ -52,11 +54,11 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 				fmt.Fprintf(os.Stderr, "sync: --policy %s accepted (filter applied after upsert)\n", policyID)
 			}
 
-			nReports, nExpenses, nWorkspaces := ingestReconnectApp(st, data, sinceDate, policyID)
+			nReports, nExpenses, nWorkspaces, nPeople := ingestReconnectApp(st, data, sinceDate, policyID, c.Config)
 
 			fmt.Fprintf(cmd.OutOrStdout(),
-				"Synced %d reports, %d expenses, %d workspaces from Expensify.\n",
-				nReports, nExpenses, nWorkspaces)
+				"Synced %d reports, %d expenses, %d workspaces, %d people from Expensify.\n",
+				nReports, nExpenses, nWorkspaces, nPeople)
 			return nil
 		},
 	}
@@ -67,11 +69,14 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 }
 
 // ingestReconnectApp parses the response blob from /ReconnectApp and upserts
-// every plausible report / expense / workspace we can find. Expensify's shape
-// varies: the payload typically has `onyxData` which is an array of patches,
-// each carrying `key` + `value`. Keys like `transactions_*`, `reports_*`, and
-// `policy_*` carry what we want.
-func ingestReconnectApp(st *store.Store, data json.RawMessage, since, policyFilter string) (nReports, nExpenses, nWorkspaces int) {
+// every plausible report / expense / workspace / person we can find.
+// Expensify's shape varies: the payload typically has `onyxData` which is an
+// array of patches, each carrying `key` + `value`. Keys like `transactions_*`,
+// `reports_*`, `policy_*`, `personalDetailsList`, and `session` each drive
+// their own upsert path. If cfg is non-nil and its ExpensifyAccountID field
+// is unset, the session.accountID discovered here is persisted to the config
+// file.
+func ingestReconnectApp(st *store.Store, data json.RawMessage, since, policyFilter string, cfg *config.Config) (nReports, nExpenses, nWorkspaces, nPeople int) {
 	var top map[string]any
 	if err := json.Unmarshal(data, &top); err != nil {
 		fmt.Fprintf(os.Stderr, "sync: could not parse response JSON: %v\n", err)
@@ -87,30 +92,38 @@ func ingestReconnectApp(st *store.Store, data json.RawMessage, since, policyFilt
 			}
 			key, _ := m["key"].(string)
 			val := m["value"]
-			nR, nE, nW := ingestOnyxSlice(st, key, val, since, policyFilter)
+			nR, nE, nW, nP := ingestOnyxSlice(st, key, val, since, policyFilter, cfg)
 			nReports += nR
 			nExpenses += nE
 			nWorkspaces += nW
+			nPeople += nP
 		}
 	}
 
 	// Also try top-level shortcuts that some responses include.
 	if v, ok := top["reports"]; ok {
-		nR, _, _ := ingestOnyxSlice(st, "reports", v, since, policyFilter)
+		nR, _, _, _ := ingestOnyxSlice(st, "reports", v, since, policyFilter, cfg)
 		nReports += nR
 	}
 	if v, ok := top["transactions"]; ok {
-		_, nE, _ := ingestOnyxSlice(st, "transactions", v, since, policyFilter)
+		_, nE, _, _ := ingestOnyxSlice(st, "transactions", v, since, policyFilter, cfg)
 		nExpenses += nE
 	}
 	if v, ok := top["policies"]; ok {
-		_, _, nW := ingestOnyxSlice(st, "policies", v, since, policyFilter)
+		_, _, nW, _ := ingestOnyxSlice(st, "policies", v, since, policyFilter, cfg)
 		nWorkspaces += nW
+	}
+	if v, ok := top["personalDetailsList"]; ok {
+		_, _, _, nP := ingestOnyxSlice(st, "personalDetailsList", v, since, policyFilter, cfg)
+		nPeople += nP
+	}
+	if v, ok := top["session"]; ok {
+		maybeCaptureSessionAccountID(v, cfg)
 	}
 	return
 }
 
-func ingestOnyxSlice(st *store.Store, key string, val any, since, policyFilter string) (nReports, nExpenses, nWorkspaces int) {
+func ingestOnyxSlice(st *store.Store, key string, val any, since, policyFilter string, cfg *config.Config) (nReports, nExpenses, nWorkspaces, nPeople int) {
 	switch {
 	case strings.HasPrefix(key, "transactions") || strings.HasPrefix(key, "transaction_"):
 		nExpenses = upsertTransactions(st, val, since, policyFilter)
@@ -118,8 +131,66 @@ func ingestOnyxSlice(st *store.Store, key string, val any, since, policyFilter s
 		nReports = upsertReports(st, val, policyFilter)
 	case strings.HasPrefix(key, "policies") || strings.HasPrefix(key, "policy_"):
 		nWorkspaces = upsertPolicies(st, val)
+	case key == "personalDetailsList":
+		nPeople = upsertPersonalDetails(st, val)
+	case key == "session":
+		maybeCaptureSessionAccountID(val, cfg)
 	}
 	return
+}
+
+// upsertPersonalDetails walks a map keyed by stringified accountID, where each
+// value is a `{displayName, login, avatar}` map, and upserts a Person row per
+// entry. Returns the number of rows successfully upserted.
+func upsertPersonalDetails(st *store.Store, val any) int {
+	m, ok := val.(map[string]any)
+	if !ok {
+		return 0
+	}
+	count := 0
+	for k, child := range m {
+		id, err := strconv.ParseInt(strings.TrimSpace(k), 10, 64)
+		if err != nil || id == 0 {
+			continue
+		}
+		details, ok := child.(map[string]any)
+		if !ok {
+			continue
+		}
+		p := store.Person{
+			AccountID:   id,
+			DisplayName: firstString(details, "displayName", "display_name"),
+			Login:       firstString(details, "login", "email"),
+			Avatar:      firstString(details, "avatar", "avatarURL"),
+		}
+		if err := st.UpsertPerson(p); err != nil {
+			fmt.Fprintf(os.Stderr, "sync: upsert person %d: %v\n", id, err)
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+// maybeCaptureSessionAccountID extracts `accountID` from the session value
+// (which may be a map or a nested onyx shape) and persists it to cfg when
+// cfg.ExpensifyAccountID is unset.
+func maybeCaptureSessionAccountID(val any, cfg *config.Config) {
+	if cfg == nil || cfg.ExpensifyAccountID != 0 {
+		return
+	}
+	m, ok := val.(map[string]any)
+	if !ok {
+		return
+	}
+	id := firstInt64(m, "accountID", "account_id", "currentUserAccountID")
+	if id == 0 {
+		return
+	}
+	cfg.ExpensifyAccountID = id
+	if err := cfg.SaveAccountID(id); err != nil {
+		fmt.Fprintf(os.Stderr, "sync: could not persist accountID to config: %v\n", err)
+	}
 }
 
 func upsertTransactions(st *store.Store, val any, since, policyFilter string) int {

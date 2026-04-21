@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -25,6 +26,7 @@ type Config struct {
 	ExpensifyAuthToken         string    `toml:"auth_token"`
 	ExpensifyPartnerUserId     string    `toml:"partner_user_id"`
 	ExpensifyPartnerUserSecret string    `toml:"partner_user_secret"`
+	ExpensifyAccountID         int64     `toml:"expensify_account_id"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -64,6 +66,11 @@ func Load(configPath string) (*Config, error) {
 		cfg.ExpensifyPartnerUserSecret = v
 		cfg.AuthSource = "env:EXPENSIFY_PARTNER_USER_SECRET"
 	}
+	if v := os.Getenv("EXPENSIFY_ACCOUNT_ID"); v != "" {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.ExpensifyAccountID = id
+		}
+	}
 
 	// Base URL override (used by printing-press verify to point at mock/test servers)
 	if v := os.Getenv("EXPENSIFY_BASE_URL"); v != "" {
@@ -100,6 +107,13 @@ func (c *Config) SaveSessionToken(token, email string) error {
 	} else {
 		c.AuthSource = "login"
 	}
+	return c.save()
+}
+
+// SaveAccountID persists the session user's Expensify accountID to the config
+// file. Used by sync to remember who "I" am for owner-filter defaults.
+func (c *Config) SaveAccountID(id int64) error {
+	c.ExpensifyAccountID = id
 	return c.save()
 }
 
