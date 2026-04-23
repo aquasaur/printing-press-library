@@ -17,12 +17,40 @@ type Config struct {
 	BaseURL       string    `toml:"base_url"`
 	AuthHeaderVal string    `toml:"auth_header"`
 	AuthSource    string    `toml:"-"`
+	AuthType      string    `toml:"auth_type"` // "" / "none" / "oauth"
 	AccessToken   string    `toml:"access_token"`
 	RefreshToken  string    `toml:"refresh_token"`
 	TokenExpiry   time.Time `toml:"token_expiry"`
 	ClientID      string    `toml:"client_id"`
 	ClientSecret  string    `toml:"client_secret"`
+
+	// AutoSync controls whether read commands warm the store from the Atom
+	// feed before serving a query. Default true. Integrators that prefer
+	// hand-managed warmth can set this to false via `producthunt-pp-cli
+	// config set auto_sync false` (or by editing the TOML directly).
+	AutoSync    *bool `toml:"auto_sync"`
+
+	// AutoEnrich controls whether `search` calls GraphQL on thin local
+	// results without requiring the --enrich flag each time. Requires
+	// AuthType == "oauth". Default false — enrichment is opt-in.
+	AutoEnrich  bool  `toml:"auto_enrich"`
+
 	Path          string    `toml:"-"`
+}
+
+// AutoSyncEnabled returns true when read commands should run auto-sync.
+// nil AutoSync means "never configured" → default true.
+func (c *Config) AutoSyncEnabled() bool {
+	if c.AutoSync == nil {
+		return true
+	}
+	return *c.AutoSync
+}
+
+// HasOAuth reports whether OAuth credentials are configured. Tier 2/3
+// features (backfill, search --enrich) silently skip when this is false.
+func (c *Config) HasOAuth() bool {
+	return c.AuthType == "oauth" && c.AccessToken != ""
 }
 
 func Load(configPath string) (*Config, error) {
@@ -87,7 +115,21 @@ func (c *Config) SaveTokens(clientID, clientSecret, accessToken, refreshToken st
 	return c.save()
 }
 
+// SaveOAuth persists OAuth app credentials and the access token obtained via
+// client_credentials exchange. Sets AuthType = "oauth" so downstream code
+// (HasOAuth, backfill gate) can see the store is authenticated.
+func (c *Config) SaveOAuth(clientID, clientSecret, accessToken string, expiry time.Time) error {
+	c.AuthType = "oauth"
+	c.ClientID = clientID
+	c.ClientSecret = clientSecret
+	c.AccessToken = accessToken
+	c.RefreshToken = "" // client_credentials grant has no refresh token
+	c.TokenExpiry = expiry
+	return c.save()
+}
+
 func (c *Config) ClearTokens() error {
+	c.AuthType = ""
 	c.AccessToken = ""
 	c.RefreshToken = ""
 	c.TokenExpiry = time.Time{}

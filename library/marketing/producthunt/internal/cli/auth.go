@@ -19,6 +19,7 @@ func newAuthCmd(flags *rootFlags) *cobra.Command {
 	cmd.AddCommand(newAuthStatusCmd(flags))
 	cmd.AddCommand(newAuthSetTokenCmd(flags))
 	cmd.AddCommand(newAuthLogoutCmd(flags))
+	cmd.AddCommand(newAuthRegisterCmd(flags))
 
 	return cmd
 }
@@ -35,18 +36,40 @@ func newAuthStatusCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			w := cmd.OutOrStdout()
-			header := cfg.AuthHeader()
-			if header == "" {
-				fmt.Fprintln(w, red("Not authenticated"))
-				fmt.Fprintln(w, "")
-				fmt.Fprintln(w, "Set your token:")
-				fmt.Fprintf(w, "  producthunt-pp-cli auth set-token <token>\n")
-				return authErr(fmt.Errorf("no credentials configured"))
+
+			// Distinguish the three states the CLI can be in:
+			//   - OAuth-configured (Tier 2/3 unlocked)
+			//   - bearer-token-configured (legacy AuthHeader path)
+			//   - unauthenticated (Atom runtime only — which is still useful)
+			if cfg.HasOAuth() {
+				fmt.Fprintln(w, green("Authenticated (OAuth)"))
+				fmt.Fprintf(w, "  Config: %s\n", cfg.Path)
+				if cfg.ClientID != "" {
+					fmt.Fprintf(w, "  Client ID: %s\n", maskMiddle(cfg.ClientID, 4, 4))
+				}
+				if !cfg.TokenExpiry.IsZero() {
+					fmt.Fprintf(w, "  Token expires: %s\n", cfg.TokenExpiry.Format("2006-01-02 15:04:05 MST"))
+				}
+				fmt.Fprintln(w, "  Unlocked: backfill, search --enrich")
+				return nil
 			}
 
-			fmt.Fprintln(w, green("Authenticated"))
-			fmt.Fprintf(w, "  Source: %s\n", cfg.AuthSource)
-			fmt.Fprintf(w, "  Config: %s\n", cfg.Path)
+			header := cfg.AuthHeader()
+			if header != "" {
+				fmt.Fprintln(w, green("Authenticated (bearer token)"))
+				fmt.Fprintf(w, "  Source: %s\n", cfg.AuthSource)
+				fmt.Fprintf(w, "  Config: %s\n", cfg.Path)
+				return nil
+			}
+
+			// No auth configured. This is NOT an error — the Atom runtime
+			// (sync/recent/today/list/search) works without auth. Only
+			// Tier 2/3 features need it.
+			fmt.Fprintln(w, yellow("Atom-only (no auth configured)"))
+			fmt.Fprintln(w, "  Atom-runtime commands (sync, recent, list, search) work without auth.")
+			fmt.Fprintln(w, "")
+			fmt.Fprintln(w, "To unlock Tier 2/3 features (backfill, search --enrich):")
+			fmt.Fprintln(w, "  producthunt-pp-cli auth register")
 			return nil
 		},
 	}
