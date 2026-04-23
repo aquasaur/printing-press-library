@@ -139,7 +139,7 @@
       "name": "hackernews",
       "category": "media-and-entertainment",
       "api": "Hacker News",
-      "description": "Browse, search, and analyze Hacker News \u2014 front page, Show HN, Ask HN, Who is Hiring, topic pulse, and pipe-friendly output",
+      "description": "Browse, search, and analyze Hacker News — front page, Show HN, Ask HN, Who is Hiring, topic pulse, and pipe-friendly output",
       "path": "library/media-and-entertainment/hackernews",
       "mcp": {
         "binary": "hackernews-pp-mcp",
@@ -275,7 +275,7 @@
       "name": "recipe-goat",
       "category": "food-and-dining",
       "api": "Cross-site recipe aggregator (15 trusted sites) + USDA FoodData Central",
-      "description": "Find the best version of any recipe across 15 trusted sites \u2014 rank by trust \u00d7 rating \u00d7 reviews, build a local SQLite cookbook with pantry match, meal plans, cook log, substitutions, and USDA-backed nutrition backfill",
+      "description": "Find the best version of any recipe across 15 trusted sites — rank by trust × rating × reviews, build a local SQLite cookbook with pantry match, meal plans, cook log, substitutions, and USDA-backed nutrition backfill",
       "path": "library/food-and-dining/recipe-goat",
       "mcp": {
         "binary": "recipe-goat-pp-mcp",
@@ -286,6 +286,29 @@
           "USDA_FDC_API_KEY"
         ],
         "mcp_ready": "full"
+      }
+    },
+    {
+      "name": "salesforce-headless-360",
+      "category": "sales-and-crm",
+      "api": "Salesforce Headless 360",
+      "description": "Salesforce Headless 360 agent-context packager: signed, FLS-safe cross-surface bundles any agent can consume. Packages Customer 360 (Accounts, Contacts, Opps, Cases, Activities, Chatter, ContentDocumentLinks) plus optional Data Cloud profile and Slack linkage into a JWS-signed JSON bundle verifiable offline.",
+      "path": "library/sales-and-crm/salesforce-headless-360",
+      "mcp": {
+        "binary": "salesforce-headless-360-pp-mcp",
+        "transport": "stdio",
+        "tool_count": 10,
+        "auth_type": "oauth2",
+        "env_vars": [
+          "SALESFORCE_ACCESS_TOKEN",
+          "SALESFORCE_INSTANCE_URL",
+          "SALESFORCE_360_CLIENT_ID",
+          "SALESFORCE_360_CLIENT_SECRET"
+        ],
+        "mcp_ready": "full",
+        "manifest_checksum": "sha256:d285a46823816c3264fcd2146abdec8884cea40eb0189335d3b0f7a82ebfd799",
+        "spec_format": "internal",
+        "manifest_url": "library/sales-and-crm/salesforce-headless-360/tools-manifest.json"
       }
     },
     {
@@ -363,7 +386,7 @@
       "name": "yahoo-finance",
       "category": "commerce",
       "api": "Yahoo Finance",
-      "description": "Quotes, charts, fundamentals, options chains, and a local portfolio/watchlist tracker against Yahoo Finance \u2014 no API key, with Chrome-session fallback for rate-limited IPs",
+      "description": "Quotes, charts, fundamentals, options chains, and a local portfolio/watchlist tracker against Yahoo Finance — no API key, with Chrome-session fallback for rate-limited IPs",
       "path": "library/commerce/yahoo-finance",
       "mcp": {
         "binary": "yahoo-finance-pp-mcp",

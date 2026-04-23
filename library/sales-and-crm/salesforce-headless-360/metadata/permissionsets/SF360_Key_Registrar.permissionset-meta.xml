@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Allows Salesforce Headless 360 key registration metadata access.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>SF360 Key Registrar</label>
+    <customMetadataTypeAccesses>
+        <enabled>true</enabled>
+        <name>SF360_Bundle_Key__mdt</name>
+    </customMetadataTypeAccesses>
+</PermissionSet>

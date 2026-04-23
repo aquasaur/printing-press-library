@@ -1,0 +1,217 @@
+{
+  "api_name": "salesforce-headless-360",
+  "base_url": "https://login.salesforce.com",
+  "description": "Salesforce Headless 360 agent-context packager: signed, FLS-safe cross-surface bundles for agents.",
+  "mcp_ready": "full",
+  "auth": {
+    "type": "oauth2",
+    "header": "Authorization",
+    "format": "Bearer %s",
+    "env_vars": [
+      "SALESFORCE_ACCESS_TOKEN",
+      "SALESFORCE_INSTANCE_URL",
+      "SALESFORCE_360_CLIENT_ID",
+      "SALESFORCE_360_CLIENT_SECRET"
+    ],
+    "key_url": "https://help.salesforce.com/s/articleView?id=sf.connected_app_overview.htm"
+  },
+  "required_headers": [],
+  "tools": [
+    {
+      "name": "accounts_get",
+      "description": "Fetch one Account by Id.",
+      "method": "GET",
+      "path": "/services/data/v63.0/sobjects/Account/{id}",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "location": "path",
+          "description": "Account Id (18-char) or name",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "accounts_list",
+      "description": "List accounts via SOQL.",
+      "method": "GET",
+      "path": "/services/data/v63.0/query",
+      "params": [
+        {
+          "name": "q",
+          "type": "string",
+          "location": "query",
+          "description": "SOQL query (defaults to recent accounts)"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "location": "query",
+          "description": "Max records"
+        }
+      ]
+    },
+    {
+      "name": "cases_list",
+      "description": "List cases.",
+      "method": "GET",
+      "path": "/services/data/v63.0/query",
+      "params": [
+        {
+          "name": "account",
+          "type": "string",
+          "location": "query",
+          "description": "Filter by Account Id"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "location": "query",
+          "description": "Filter by Status"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "location": "query",
+          "description": "Max records"
+        }
+      ]
+    },
+    {
+      "name": "contacts_get",
+      "description": "Fetch one Contact by Id.",
+      "method": "GET",
+      "path": "/services/data/v63.0/sobjects/Contact/{id}",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "location": "path",
+          "description": "Contact Id",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "contacts_list",
+      "description": "List contacts for an account or by query.",
+      "method": "GET",
+      "path": "/services/data/v63.0/query",
+      "params": [
+        {
+          "name": "account",
+          "type": "string",
+          "location": "query",
+          "description": "Filter by Account Id"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "location": "query",
+          "description": "Max records"
+        }
+      ]
+    },
+    {
+      "name": "events_list",
+      "description": "List events.",
+      "method": "GET",
+      "path": "/services/data/v63.0/query",
+      "params": [
+        {
+          "name": "account",
+          "type": "string",
+          "location": "query",
+          "description": "Filter by Account Id"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "location": "query",
+          "description": "Modified since"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "location": "query",
+          "description": "Max records"
+        }
+      ]
+    },
+    {
+      "name": "limits_get",
+      "description": "Current org limits.",
+      "method": "GET",
+      "path": "/services/data/v63.0/limits",
+      "params": []
+    },
+    {
+      "name": "opportunities_get",
+      "description": "Fetch one Opportunity by Id.",
+      "method": "GET",
+      "path": "/services/data/v63.0/sobjects/Opportunity/{id}",
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "location": "path",
+          "description": "Opportunity Id",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "opportunities_list",
+      "description": "List opportunities.",
+      "method": "GET",
+      "path": "/services/data/v63.0/query",
+      "params": [
+        {
+          "name": "account",
+          "type": "string",
+          "location": "query",
+          "description": "Filter by Account Id"
+        },
+        {
+          "name": "stage",
+          "type": "string",
+          "location": "query",
+          "description": "Filter by StageName"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "location": "query",
+          "description": "Max records"
+        }
+      ]
+    },
+    {
+      "name": "tasks_list",
+      "description": "List tasks.",
+      "method": "GET",
+      "path": "/services/data/v63.0/query",
+      "params": [
+        {
+          "name": "account",
+          "type": "string",
+          "location": "query",
+          "description": "Filter by Account Id"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "location": "query",
+          "description": "Modified since (e.g., 30d, YYYY-MM-DD)"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "location": "query",
+          "description": "Max records"
+        }
+      ]
+    }
+  ]
+}
