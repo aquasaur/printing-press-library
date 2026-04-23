@@ -39,6 +39,7 @@ Scoped by --since to narrow the window. Limits default to 50 hits.`,
 			if pattern == "" {
 				return usageErr(fmt.Errorf("a pattern is required"))
 			}
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

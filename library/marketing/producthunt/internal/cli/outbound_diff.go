@@ -44,6 +44,7 @@ one snapshot cannot detect drift.`,
 			if err != nil {
 				return usageErr(fmt.Errorf("--since: %w", err))
 			}
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

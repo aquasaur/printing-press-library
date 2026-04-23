@@ -49,6 +49,7 @@ returns [].`,
 				}
 				sinceT = t
 			}
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

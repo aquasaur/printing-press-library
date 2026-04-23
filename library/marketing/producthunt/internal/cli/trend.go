@@ -59,6 +59,7 @@ to build up a meaningful trajectory.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

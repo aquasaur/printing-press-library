@@ -51,6 +51,7 @@ aggregate counts only.`,
   # Last 30 days, agent-narrow
   producthunt-pp-cli calendar --days 30 --agent --select 'days.date,days.count'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

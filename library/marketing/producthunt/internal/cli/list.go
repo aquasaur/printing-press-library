@@ -41,6 +41,7 @@ Run 'sync' first to populate the store. An empty store returns [].`,
   # Agent-friendly narrow payload, top 5 most-seen
   producthunt-pp-cli list --sort seen_count --limit 5 --agent`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

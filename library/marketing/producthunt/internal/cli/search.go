@@ -34,6 +34,7 @@ query grammar.`,
 			if query == "" {
 				return usageErr(fmt.Errorf("search query is required"))
 			}
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

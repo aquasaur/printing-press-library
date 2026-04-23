@@ -52,6 +52,7 @@ from your local snapshot store — more snapshots = sharper signal.`,
 				}
 				sinceT = t
 			}
+			autoWarm(flags, dbPath)
 			db, err := openStore(dbPath)
 			if err != nil {
 				return configErr(err)

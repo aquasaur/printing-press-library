@@ -38,6 +38,7 @@ the topmost entry in the feed at fetch time.`,
 			if limit <= 0 {
 				limit = 10
 			}
+			autoWarm(flags, dbPath)
 
 			// Resolve data source: --live forces network; otherwise prefer
 			// store with live fallback when store is empty.
