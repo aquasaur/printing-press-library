@@ -6,9 +6,9 @@
 
 This CLI ships three tiers of access, picking the lightest one automatically:
 
-1. **Atom auto-sync (always on, no auth).** Every read command checks whether the local SQLite store is stale (>24h since last sync) and silently fetches the public `/feed` before serving the query. Integrators just call `search`/`list`/etc. — the CLI keeps itself fresh.
-2. **`search --enrich` (opt-in, OAuth).** When local results are thin for a topic, fires one narrow GraphQL query for that topic over the last 30 days. Fail-soft: if OAuth isn't configured or the budget is close to the floor, silently skipped and the local result set is returned anyway.
-3. **`backfill` (explicit, OAuth).** Paginates the PH GraphQL `posts` field over a window (default 30 days) and seeds the store in one shot. Budget-aware, resumable via `backfill resume`. Used for cold-starts, gap recovery after offline periods, or deliberate historical windows.
+1. **Atom auto-sync (always on, no auth).** Every read command checks whether the local SQLite store is stale (>24h since last sync) and silently fetches the public `/feed` before serving the query. Integrators just call `search`/`list`/etc. — the CLI keeps itself fresh. This builds history from the moment you start syncing.
+2. **`search --enrich` (opt-in, authenticated).** When local results are thin for a topic, fires one narrow GraphQL query for that topic over the last 30 days. Fail-soft: if Product Hunt GraphQL auth isn't configured or the budget is close to the floor, local results are returned with structured metadata explaining the skipped enrichment.
+3. **`backfill` (explicit, authenticated).** Paginates the Product Hunt GraphQL `posts` field over a window (default 30 days) and seeds the store in one shot. Budget-aware, resumable via `backfill resume`. Used for cold-starts, gap recovery after offline periods, or deliberate historical windows.
 
 Every command speaks JSON, filters fields with `--select`, and exits with typed codes for scripts and agents.
 
@@ -28,20 +28,40 @@ Download from [Releases](https://github.com/mvanhorn/printing-press-library/rele
 
 The Atom runtime is token-free by construction. All the daily-driver commands (`sync`, `today`, `recent`, `list`, `search`, `trend`, `calendar`, `makers`, `tagline-grep`, `watch`, `outbound-diff`) read the public `/feed` and need no credentials.
 
-OAuth is opt-in and unlocks two capabilities:
+Product Hunt GraphQL auth is opt-in and unlocks two capabilities that the anonymous Atom feed cannot provide:
 
 - `search --enrich` — top up thin local search results from the GraphQL API
-- `backfill` — bulk-seed 30 days of history in one call
+- `backfill` — bulk-seed historical posts in one call
 
-To enable, register a Product Hunt app once and paste the credentials:
+Anonymous mode cannot retroactively backfill the past because `/feed` exposes only the current feed window. It can build durable long-term history by running `sync` or relying on auto-sync from now forward.
+
+For guided setup:
 
 ```bash
-producthunt-pp-cli auth register
-# → follow the prompt, visit https://www.producthunt.com/v2/oauth/applications
-# → paste client_id and client_secret
+producthunt-pp-cli auth setup
 ```
 
-The CLI exchanges the client credentials for an app-level access token (no user login) and saves it to `~/.config/producthunt-pp-cli/config.toml` with `0600` perms. Revoke with `auth logout`.
+OAuth app path:
+
+```bash
+# Visit https://www.producthunt.com/v2/oauth/applications
+# Create an app:
+#   Name: producthunt-pp-cli
+#   Redirect URI: https://localhost/callback
+producthunt-pp-cli auth register
+```
+
+Agent/CI path:
+
+```bash
+PRODUCTHUNT_CLIENT_ID=... PRODUCTHUNT_CLIENT_SECRET=... \
+  producthunt-pp-cli auth register --no-input
+
+PRODUCTHUNT_DEVELOPER_TOKEN=... \
+  producthunt-pp-cli auth set-token --token-env PRODUCTHUNT_DEVELOPER_TOKEN
+```
+
+The CLI saves credentials to `~/.config/producthunt-pp-cli/config.toml` with `0600` perms. Revoke with `auth logout`. `auth status --json`, `doctor --json`, and `agent-context` expose whether GraphQL-powered features are currently available.
 
 Product Hunt's HTML pages (post detail, user profiles, topic pages, historical leaderboards, newsletter archive) are gated by Cloudflare against automated HTTP clients. Commands that would need those routes (`post`, `comments`, `leaderboard`, `topic`, `user`, `collection`, `newsletter`) ship as explicit stubs that emit a structured JSON explanation and exit with code 3. They are named in the command reference below so agents and scripts can discover the gap without hitting opaque timeouts.
 
@@ -54,7 +74,8 @@ producthunt-pp-cli search "ai agent"
 # Or kick off a manual sync explicitly.
 producthunt-pp-cli sync
 
-# Optional Tier 2/3: register OAuth, then bulk-seed 30 days in one call.
+# Optional Tier 2/3: configure Product Hunt GraphQL, then bulk-seed 30 days.
+producthunt-pp-cli auth setup
 producthunt-pp-cli auth register
 producthunt-pp-cli backfill --days 30 --dry-run  # estimate first
 producthunt-pp-cli backfill --days 30
