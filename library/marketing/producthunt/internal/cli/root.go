@@ -171,6 +171,7 @@ See README.md or the bundled SKILL.md for recipes.`,
 	rootCmd.AddCommand(newExportCmd(&flags))
 	rootCmd.AddCommand(newImportCmd(&flags))
 	rootCmd.AddCommand(newSyncCmd(&flags))
+	rootCmd.AddCommand(newBackfillCmd(&flags))
 	rootCmd.AddCommand(newWorkflowCmd(&flags))
 	rootCmd.AddCommand(newAPICmd(&flags))
 	rootCmd.AddCommand(newFeedPromotedCmd(&flags))
