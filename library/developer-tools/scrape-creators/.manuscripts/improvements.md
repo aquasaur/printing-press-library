@@ -1,32 +1,62 @@
 # PR #113 Quality Improvements
 
-Four proposed improvements to land before or alongside PR #113. Each is additive; none change API behavior or break existing invocations.
+Status: IMPLEMENTED in this PR. All four axes ship as additive changes on top of PR #113.
 
 ## 1. Platform action command naming
 
-See `action-map-proposal.md` in this directory. Renames the 82 operation-ID leaf names (`list`, `list-post-2`, `list-user-5`, `list-adlibrary-3`) to `platform action` pairs matching v1's `@scrapecreators/cli` convention (`tiktok profile`, `instagram user-posts`, `facebook adlibrary-search-ads`). Splits the dual-role `promoted_<platform>.go` files so per-platform cobra parents are pure navigation. Operation-ID names and former top-level parent shortcuts become hidden cobra aliases for backward compatibility.
+92 leaf commands renamed from OpenAPI operation IDs to `platform action` pairs matching v1's `@scrapecreators/cli` convention.
 
-Blocks on: Adrian reviewing the 115-endpoint map.
+Before:
+```
+scrape-creators-pp-cli tiktok list-profile --handle charlidamelio
+scrape-creators-pp-cli instagram list-user-5 --user-id 123
+scrape-creators-pp-cli facebook list-adlibrary-3 --query nike
+```
+
+After:
+```
+scrape-creators-pp-cli tiktok profile --handle charlidamelio
+scrape-creators-pp-cli instagram user-posts --user-id 123
+scrape-creators-pp-cli facebook adlibrary-search-companies --query nike
+```
+
+Old operation-ID names remain callable via hidden cobra aliases. Every v1 command from v1's `src/command-registry.js` now resolves to the same endpoint in this CLI.
+
+See `action-map-proposal.md` for the full 115-endpoint map.
+
+Not yet split: the 23 `promoted_<platform>.go` dual-role parents still carry their own RunE shortcut. `scrape-creators-pp-cli tiktok --help` now lists clean action names in the Available Commands block but the parent also shows shortcut flags. Splitting the dual-role parents is a follow-up.
 
 ## 2. Interactive wizard on bare invocation
 
-Bare `scrape-creators-pp-cli` in a TTY launches a guided wizard mirroring v1's `@clack/prompts` three-step flow (platform, action, required params). Non-TTY invocations and anything with `--no-input`, `--agent`, or `--yes` keep printing help. Library: `github.com/charmbracelet/huh` unless integration measurement crosses 5 MB over baseline, in which case fall back to `survey/v2`.
+`internal/cli/wizard.go`. Bare invocation in a TTY walks platform -> action -> required params, then executes the resolved command. Non-TTY stdin, `--no-input`, `--agent`, and `--yes` all fall through to help.
+
+Stdin-based, no TUI dependency. Binary size unchanged.
 
 ## 3. `agent add` auto-wiring
 
-`scrape-creators-pp-cli agent add cursor|claude-desktop|claude-code|codex` writes a valid MCP server entry into the target's config with `0600` permissions. `--hosted` writes the `api.scrapecreators.com/mcp` URL; default writes the local `scrape-creators-pp-mcp` stdio binary. Cursor, Claude Desktop, and Claude Code share a JSON helper (`mcpServers` shape); Codex uses a TOML helper via `pelletier/go-toml/v2`. Claude Code writes directly to `~/.claude.json`; no `claude mcp add` shell-out, so there is no PATH dependency.
+`internal/cli/agent.go`. `scrape-creators-pp-cli agent add cursor|claude-desktop|claude-code|codex` writes a valid MCP server entry into the target's config file:
 
-Refuse to overwrite an existing `scrape-creators-pp-cli` or `scrapecreators` entry without `--force`; print a diff.
+- Cursor: `~/.cursor/mcp.json` (JSON mcpServers)
+- Claude Desktop: platform-correct path (macOS / Windows / Linux; JSON mcpServers)
+- Claude Code: `~/.claude.json` (JSON mcpServers; no `claude` CLI shell-out)
+- Codex: `~/.codex/config.toml` (TOML `[mcp_servers.*]`)
+
+`--hosted` writes the `api.scrapecreators.com/mcp` URL with an `x-api-key` header instead of the local `scrape-creators-pp-mcp` stdio binary. `--force` overrides the existing-entry refusal, which prints a diff by default. Every write enforces mode 0600 on the target file. Parent directories are created at 0700 if missing.
 
 ## 4. Client-side input normalization
 
-New `internal/cli/input_normalize.go` with `NormalizeHandle` (strip one leading `@`, trim whitespace) and `NormalizeHashtag` (strip one leading `#`, trim whitespace). Applied in every leaf that accepts a handle or hashtag parameter (~30 files). README surfaces the rules in a dedicated block up front so the library documents its own behavior, not upstream API tolerance.
+`internal/cli/input_normalize.go`. Two helpers: `NormalizeHandle` strips a single leading `@` and trims whitespace; `NormalizeHashtag` does the same with `#`. Applied in every leaf that accepts a handle or hashtag parameter (26 files). Both idempotent.
+
+`scrape-creators-pp-cli tiktok profile --handle @charlidamelio` and `--handle charlidamelio` now produce identical requests. README surfaces the rule up front so users learn about it before hitting an API-tolerance edge case.
+
+## v1 fact verification (R6, prior plan)
+
+PR #113's `internal/config/config.go` already accepts both env var names: `SCRAPE_CREATORS_API_KEY_AUTH` (primary) and `SCRAPECREATORS_API_KEY` (v1-compat fallback, line 58-59). No migration needed. Config path differs from v1 but migration is out of scope here; users on v1 re-enter the key once on first v2 run.
 
 ## Ordering
 
-1. Review and agree on the action map (this PR). Blocks on Adrian.
-2. After PR #113 merges, land the cobra restructure (#1) on top.
-3. Improvements #2, #3, #4 can land in parallel with #1 since they touch new files or additive sections of `root.go` only.
+1. This PR lands on top of PR #113. Review once naming is agreed.
+2. After merge, follow-up PRs split the dual-role `promoted_<platform>.go` parents (cleaner `tiktok --help`), add wizard TUI polish, and port additional tests.
 
 ## Out of scope here
 
@@ -35,8 +65,8 @@ New `internal/cli/input_normalize.go` with `NormalizeHandle` (strip one leading 
 - `curl | sh` installer.
 - Retiring v1 or transferring repo home.
 
-Those are adoption / handoff work Adrian owns when he is ready to port this into `@scrapecreators/cli`. Tracked separately.
+Adoption / handoff work Adrian owns when he is ready to port this into `@scrapecreators/cli`.
 
 ## Companion plan
 
-Full implementation plan with file lists, test scenarios, and risk mitigations: `docs/plans/2026-04-23-002-feat-pr-113-library-quality-plan.md` on `main`.
+`docs/plans/2026-04-23-002-feat-pr-113-library-quality-plan.md` on `main` has the full plan, risk register, and test scenarios.
