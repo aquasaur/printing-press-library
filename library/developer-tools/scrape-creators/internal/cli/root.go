@@ -128,7 +128,7 @@ func Execute() error {
 	rootCmd.AddCommand(newSyncCmd(&flags))
 	rootCmd.AddCommand(newTailCmd(&flags))
 	rootCmd.AddCommand(newAnalyticsCmd(&flags))
-	rootCmd.AddCommand(newWorkflowCmd(&flags))
+	rootCmd.AddCommand(newArchiveCmd(&flags))
 	rootCmd.AddCommand(newAPICmd(&flags))
 	rootCmd.AddCommand(newAgentCmd(&flags))
 	rootCmd.AddCommand(newTwitchPromotedCmd(&flags))

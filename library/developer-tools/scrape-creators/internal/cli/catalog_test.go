@@ -41,14 +41,30 @@ func TestAPIInterfacesExcludesUtilityCommands(t *testing.T) {
 	root := &cobra.Command{Use: "root"}
 	root.AddCommand(&cobra.Command{Use: "tiktok", Short: "old"})
 	root.Commands()[0].AddCommand(&cobra.Command{Use: "profile"})
+	root.AddCommand(&cobra.Command{Use: "archive"})
+	root.Commands()[1].AddCommand(&cobra.Command{Use: "status"})
 	root.AddCommand(&cobra.Command{Use: "search"})
-	root.Commands()[1].AddCommand(&cobra.Command{Use: "trends"})
+	root.Commands()[2].AddCommand(&cobra.Command{Use: "trends"})
 	root.AddCommand(&cobra.Command{Use: "completion"})
-	root.Commands()[2].AddCommand(&cobra.Command{Use: "zsh"})
+	root.Commands()[3].AddCommand(&cobra.Command{Use: "zsh"})
 
 	interfaces := apiInterfaces(root)
 	if len(interfaces) != 1 || interfaces[0].Name() != "tiktok" {
 		t.Fatalf("apiInterfaces returned %v, want only tiktok", interfaces)
+	}
+}
+
+func TestNewArchiveCmdUsesArchiveNameAndWorkflowAlias(t *testing.T) {
+	cmd := newArchiveCmd(&rootFlags{})
+	if cmd.Name() != "archive" {
+		t.Fatalf("Name() = %q, want archive", cmd.Name())
+	}
+	aliases := cmd.Aliases
+	if len(aliases) != 1 || aliases[0] != "workflow" {
+		t.Fatalf("Aliases = %v, want [workflow]", aliases)
+	}
+	if sub, _, err := cmd.Find([]string{"status"}); err != nil || sub == nil || sub.Name() != "status" {
+		t.Fatalf("Find(status) = %v, %v, want status subcommand", sub, err)
 	}
 }
 

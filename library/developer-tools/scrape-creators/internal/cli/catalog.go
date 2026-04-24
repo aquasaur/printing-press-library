@@ -59,7 +59,7 @@ var apiUtilityCommands = map[string]bool{
 	"sync":       true,
 	"tail":       true,
 	"version":    true,
-	"workflow":   true,
+	"archive":    true,
 }
 
 func applyPlatformRootMetadata(root *cobra.Command) {
