@@ -38,7 +38,7 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 				header := cfg.AuthHeader()
 				if header == "" {
 					report["auth"] = "not configured"
-					report["auth_hint"] = "export SCRAPE_CREATORS_API_KEY_AUTH=<your-key>"
+					report["auth_hint"] = "export SCRAPE_CREATORS_API_KEY=<your-key>"
 					if resultErr == nil {
 						resultErr = authErr(fmt.Errorf("auth not configured"))
 					}
@@ -52,7 +52,7 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 			authEnvChecked := 0
 			authEnvSet := 0
 			authEnvChecked++
-			if os.Getenv("SCRAPE_CREATORS_API_KEY_AUTH") != "" {
+			if os.Getenv("SCRAPE_CREATORS_API_KEY") != "" {
 				authEnvSet++
 			}
 			if authEnvSet == 0 {

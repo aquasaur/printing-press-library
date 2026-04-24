@@ -20,7 +20,7 @@ const (
 	mcpServerName   = "scrape-creators"
 	mcpLocalCommand = "scrape-creators-pp-mcp"
 	mcpHostedURL    = "https://api.scrapecreators.com/mcp"
-	mcpEnvVarName   = "SCRAPE_CREATORS_API_KEY_AUTH"
+	mcpEnvVarName   = "SCRAPE_CREATORS_API_KEY"
 	mcpHostedHeader = "x-api-key"
 )
 
@@ -283,7 +283,7 @@ func optionalAPIKey(flags *rootFlags) (string, error) {
 	if err != nil {
 		return "", configErr(err)
 	}
-	return cfg.ScrapeCreatorsApiKeyAuth, nil
+	return cfg.APIKey, nil
 }
 
 func contains(haystack []string, needle string) bool {

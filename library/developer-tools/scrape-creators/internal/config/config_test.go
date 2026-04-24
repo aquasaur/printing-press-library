@@ -4,8 +4,8 @@ import "testing"
 
 func TestAuthHeaderPrefersScrapeCreatorsAPIKey(t *testing.T) {
 	cfg := &Config{
-		AuthHeaderVal:            "from-config-header",
-		ScrapeCreatorsApiKeyAuth: "from-env-key",
+		AuthHeaderVal: "from-config-header",
+		APIKey:        "from-env-key",
 	}
 
 	if got := cfg.AuthHeader(); got != "from-env-key" {
