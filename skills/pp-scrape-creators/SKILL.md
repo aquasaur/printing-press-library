@@ -144,7 +144,6 @@ Handle / hashtag normalization: the CLI strips leading `@` from handles and `#` 
 | `tail <resource>` | Stream live changes by polling one resource (NDJSON to stdout) |
 | `analytics` | Count / group-by / top-N over synced data |
 | `export` | Export synced data to JSONL or JSON (`--format`, `--output`) |
-| `import` | Push a JSONL file into the API via upsert |
 | `workflow archive` | One-shot sync of the built-in archiveable resource set; `--full` forces re-archive |
 | `workflow status` | Local archive sync state |
 | `api` | Browse every raw API endpoint by interface name (power-user escape hatch) |

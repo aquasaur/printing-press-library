@@ -74,6 +74,7 @@ Commands that go beyond what the raw API returns, built on top of the local SQLi
 ## What This Can't Do
 
 - Post, comment, DM, like, follow, or otherwise write to social platforms. This CLI is read-only.
+- Import or upsert records back into Scrape Creators. The upstream surface is read-only.
 - Archive every single endpoint automatically. `workflow archive` covers a curated set of no-input resources; endpoints that require a handle, URL, or other required args stay explicit commands.
 - Guarantee a credential verdict from `doctor`. The upstream validation surface is inconsistent, so `doctor` reports missing or rejected auth as failures and otherwise labels credentials `inconclusive` unless the API clearly rejects them.
 
@@ -315,7 +316,6 @@ The CLI ships a local SQLite layer so you can pull data once and iterate fast.
 | `search trends <hashtag>` | Snapshot hashtag result count + top videos for trend tracking |
 | `analytics` | Count / group-by / top-N over synced data |
 | `export` | Export to JSONL or JSON |
-| `import` | Import a JSONL file via API upsert |
 | `api` | Browse every raw API endpoint by interface name (power-user escape hatch) |
 | `workflow archive` | One-shot sync of the built-in archiveable resource set |
 | `workflow status` | Local archive sync state |
