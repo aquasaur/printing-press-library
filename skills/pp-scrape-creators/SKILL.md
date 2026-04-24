@@ -6,7 +6,7 @@ allowed-tools: "Read Bash"
 metadata: '{"openclaw":{"requires":{"bins":["scrape-creators-pp-cli"],"env":["SCRAPE_CREATORS_API_KEY_AUTH"]},"primaryEnv":"SCRAPE_CREATORS_API_KEY_AUTH","install":[{"id":"go","kind":"shell","command":"go install github.com/mvanhorn/printing-press-library/library/developer-tools/scrape-creators/cmd/scrape-creators-pp-cli@latest","bins":["scrape-creators-pp-cli"],"label":"Install via go install"}]}}'
 ---
 
-# Scrape Creators - Printing Press CLI
+# Scrape Creators CLI
 
 Scrape public social-media data from the terminal — profiles, posts, comments, videos, ads, and transcripts across 30+ platforms. Read-only wrapper around the [Scrape Creators](https://scrapecreators.com) API. Ships a local SQLite sync and analytics commands (`spikes`, `compare`, `cadence`, `track`, `analyze`, `transcripts`, `search trends`, `account budget`) that compound over time. Live API calls consume credits; use `--dry-run`, `account budget`, and the local sync when iterating.
 
