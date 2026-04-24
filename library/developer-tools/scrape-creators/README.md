@@ -69,13 +69,13 @@ Commands that go beyond what the raw API returns, plus a local SQLite layer for 
 - **`tiktok cadence`** — Show a creator's posting frequency by day of week and hour of day.
 - **`tiktok track`** — Record daily follower snapshots and chart a creator's growth trajectory.
 - **`tiktok analyze`** — Rank a creator's videos by engagement rate (not raw likes).
-- **`workflow archive`** — Sync the CLI's current built-in archiveable set locally for offline search and analysis (today: `account` request history).
+- **`archive`** — Sync the CLI's current built-in archiveable set locally for offline search and analysis (today: `account` request history).
 
 ## What This Can't Do
 
 - Post, comment, DM, like, follow, or otherwise write to social platforms. This CLI is read-only.
 - Import or upsert records back into Scrape Creators. The upstream surface is read-only.
-- Archive every single endpoint automatically. `workflow archive` and bare `sync` cover only the current built-in archiveable set (today: `account` request history); endpoints that require a handle, URL, query, or other required args stay explicit commands.
+- Archive every single endpoint automatically. `archive` and bare `sync` cover only the current built-in archiveable set (today: `account` request history); endpoints that require a handle, URL, query, or other required args stay explicit commands.
 - Guarantee a credential verdict from `doctor`. The upstream validation surface is inconsistent, so `doctor` reports missing or rejected auth as failures and otherwise labels credentials `inconclusive` unless the API clearly rejects them.
 
 ## Interactive Wizard
@@ -306,7 +306,7 @@ These platforms expose one endpoint each — run the top-level command directly.
 
 ### Data layer — sync, search, export, analytics
 
-The CLI ships a local SQLite layer. Bare `sync` and `workflow archive` target the built-in archiveable set; explicit `sync --resources ...` lets you hit a canonical resource route directly when the upstream endpoint supports a no-input fetch.
+The CLI ships a local SQLite layer. Bare `sync` and `archive` target the built-in archiveable set; explicit `sync --resources ...` lets you hit a canonical resource route directly when the upstream endpoint supports a no-input fetch.
 
 | Command | What it does |
 |---------|--------------|
@@ -317,8 +317,8 @@ The CLI ships a local SQLite layer. Bare `sync` and `workflow archive` target th
 | `analytics` | Count / group-by / top-N over synced data |
 | `export` | Export a supported canonical API resource to JSONL or JSON (live API read, not a local-store export) |
 | `api` | Browse every raw API endpoint by interface name (power-user escape hatch) |
-| `workflow archive` | One-shot sync of the current built-in archiveable set (currently `account`) |
-| `workflow status` | Local archive sync state |
+| `archive` | One-shot sync of the current built-in archiveable set (currently `account`) |
+| `archive status` | Local archive sync state |
 
 ## Output Formats
 
@@ -423,8 +423,8 @@ scrape-creators-pp-cli tiktok track --handle charlidamelio
 scrape-creators-pp-cli tiktok track --handle charlidamelio --history
 
 # Archive the built-in archiveable set, then inspect local status
-scrape-creators-pp-cli workflow archive
-scrape-creators-pp-cli workflow status
+scrape-creators-pp-cli archive
+scrape-creators-pp-cli archive status
 
 # Budget watch — alert when credits dip below 1000
 scrape-creators-pp-cli account budget --agent

@@ -22,7 +22,7 @@ Reach for this when the user wants to:
 - Search across all of a creator's video transcripts (`tiktok transcripts`)
 - Snapshot a hashtag's momentum (`search trends`)
 - Audit API credit spend and forecast days remaining (`account budget`)
-- Pull the built-in archiveable resource set into local SQLite for offline work (`sync`, `workflow archive`; today this is `account` request history)
+- Pull the built-in archiveable resource set into local SQLite for offline work (`sync`, `archive`; today this is `account` request history)
 - Full-text-search synced data (`search`)
 
 Skip this CLI when the user wants to *post* content (it's read-only) or authenticate as a specific social-media user (it only sees public data).
@@ -144,8 +144,8 @@ Handle / hashtag normalization: the CLI strips leading `@` from handles and `#` 
 | `tail <resource>` | Stream live changes by polling one resource (NDJSON to stdout) |
 | `analytics` | Count / group-by / top-N over synced data |
 | `export` | Export a supported canonical API resource to JSONL or JSON via live API read (`--format`, `--output`) |
-| `workflow archive` | One-shot sync of the built-in archiveable resource set (currently `account`); `--full` forces re-archive |
-| `workflow status` | Local archive sync state |
+| `archive` | One-shot sync of the built-in archiveable resource set (currently `account`); `--full` forces re-archive |
+| `archive status` | Local archive sync state |
 | `api` | Browse every raw API endpoint by interface name (power-user escape hatch) |
 | `agent add` | Wire the MCP server into `claude-code`, `claude-desktop`, `cursor`, or `codex` |
 | `doctor` | Config / auth / connectivity health check |
