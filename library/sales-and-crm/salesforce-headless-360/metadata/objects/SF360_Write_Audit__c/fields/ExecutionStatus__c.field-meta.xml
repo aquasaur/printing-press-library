@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>ExecutionStatus__c</fullName>
-    <defaultValue>pending</defaultValue>
     <description>Execution outcome for the signed write intent.</description>
     <label>Execution Status</label>
     <required>true</required>

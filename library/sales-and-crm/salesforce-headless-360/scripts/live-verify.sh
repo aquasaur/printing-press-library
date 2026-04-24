@@ -27,7 +27,7 @@ cleanup_opp_stage=""
 cleanup_account_description=""
 
 cleanup_live_writes() {
-  for task_id in "${cleanup_task_ids[@]}"; do
+  for task_id in "${cleanup_task_ids[@]:-}"; do
     if [ -n "$task_id" ]; then
       sf data delete record --target-org "$ORG" --sobject Task --record-id "$task_id" >/dev/null 2>&1 || true
     fi
@@ -107,10 +107,10 @@ echo "------------------------------------------------------------"
 run_or_fail 1 "sf CLI fall-through" "$CLI" auth login --sf "$ORG"
 
 # 2. doctor full pass
-run_or_fail 2 "doctor full pass" "$CLI" --org "$ORG" doctor
+run_or_fail 2 "doctor full pass" "$CLI" doctor
 
 # 3. Composite Graph sync (look for the request line in verbose output)
-if "$CLI" --org "$ORG" sync --account "$ACME_ID" --verbose 2>&1 | tee "${TMPDIR}/sync.out" | grep -q "composite/graph"; then
+if "$CLI" sync --account "$ACME_ID" --verbose 2>&1 | tee "${TMPDIR}/sync.out" | grep -q "composite/graph"; then
   record 3 "Composite Graph in sync" PASS "graph request observed"
 else
   record 3 "Composite Graph in sync" FAIL "no composite/graph request seen"
@@ -127,7 +127,7 @@ fi
 # 5. FLS intersection
 # This requires --run-as-user or a separate restricted login; only run if RESTRICTED_USER set
 if [ -n "$RESTRICTED_USER" ]; then
-  "$CLI" --org "$ORG" agent context --live "$ACME_ID" --run-as-user "$RESTRICTED_USER" \
+  "$CLI" agent context --live "$ACME_ID" --run-as-user "$RESTRICTED_USER" \
       --output "${TMPDIR}/restricted.json" >/dev/null 2>&1 || true
   if [ -f "${TMPDIR}/restricted.json" ]; then
     leaks=$(grep -oE 'AnnualRevenue|Salary__c' "${TMPDIR}/restricted.json" | wc -l | tr -d ' ')
@@ -153,10 +153,10 @@ else
 fi
 
 # 7. trust register
-run_or_fail 7 "trust register (Certificate or CMDT)" "$CLI" --org "$ORG" trust register
+run_or_fail 7 "trust register (Certificate or CMDT)" "$CLI" trust register
 
 # 8. agent context produces bundle
-"$CLI" --org "$ORG" agent context --live "$ACME_ID" --output "${TMPDIR}/acme.json" >/dev/null 2>&1
+"$CLI" agent context --live "$ACME_ID" --output "${TMPDIR}/acme.json" >/dev/null 2>&1
 if [ -s "${TMPDIR}/acme.json" ] && grep -q '"kid"' "${TMPDIR}/acme.json"; then
   record 8 "agent context produces signed bundle" PASS "bundle written + kid present"
 else
@@ -189,10 +189,10 @@ fi
 
 # W1. agent update one safe Account field
 cleanup_account_description=$(query_first_field "SELECT Description FROM Account WHERE Id = '$ACME_ID'" "Description")
-if "$CLI" --org "$ORG" agent update "$ACME_ID" \
+if "$CLI" agent update "$ACME_ID" \
     --field "Description=sf360 live verification W1" \
     --dry-run --json > "${TMPDIR}/W1-dry.out" 2>&1 &&
-   "$CLI" --org "$ORG" agent update "$ACME_ID" \
+   "$CLI" agent update "$ACME_ID" \
     --field "Description=sf360 live verification W1" \
     --json > "${TMPDIR}/W1.out" 2>&1; then
   if "$CLI" agent write-audit list --sobject Account --status executed --limit 5 > "${TMPDIR}/W1-audit.out" 2>&1; then
@@ -206,13 +206,13 @@ fi
 
 # W2. agent upsert twice with same key
 upsert_key="sf360-live-upsert-$(date +%Y%m%d%H%M%S)"
-if "$CLI" --org "$ORG" agent upsert \
+if "$CLI" agent upsert \
     --sobject Account \
     --idempotency-key "$upsert_key" \
     --field "Name=SF360 Live Verify Upsert" \
     --field "Description=first upsert" \
     --json > "${TMPDIR}/W2-first.out" 2>&1 &&
-   "$CLI" --org "$ORG" agent upsert \
+   "$CLI" agent upsert \
     --sobject Account \
     --idempotency-key "$upsert_key" \
     --field "Name=SF360 Live Verify Upsert" \
@@ -229,7 +229,7 @@ fi
 
 # W3. agent log-activity creates a Task
 task_key="sf360-live-task-$(date +%Y%m%d%H%M%S)"
-if "$CLI" --org "$ORG" agent log-activity \
+if "$CLI" agent log-activity \
     --type call \
     --what "$ACME_ID" \
     --subject "SF360 live verification call" \
@@ -256,7 +256,7 @@ else
   cleanup_opp_stage="$original_stage"
   if [ "$original_stage" = "$OPP_STAGE" ]; then
     record W4 "agent advance moves Opportunity stage" SKIP "OPP_STAGE equals current stage; set OPP_STAGE to a forward stage"
-  elif "$CLI" --org "$ORG" agent advance \
+  elif "$CLI" agent advance \
       --opp "$test_opp_id" \
       --stage "$OPP_STAGE" \
       --json > "${TMPDIR}/W4.out" 2>&1; then
@@ -277,7 +277,7 @@ if [ -z "$lmd" ]; then
   record W5 "stale write conflict rejected" FAIL "could not fetch LastModifiedDate"
 elif ! sf data update record --target-org "$ORG" --sobject Account --record-id "$ACME_ID" --values "Description='sf360 live verification external mutation'" > "${TMPDIR}/W5-mutate.out" 2>&1; then
   record W5 "stale write conflict rejected" FAIL "$(tail -3 "${TMPDIR}/W5-mutate.out" | tr '\n' ';')"
-elif "$CLI" --org "$ORG" agent update "$ACME_ID" \
+elif "$CLI" agent update "$ACME_ID" \
     --field "Description=sf360 stale write should fail" \
     --if-last-modified "$lmd" \
     --json > "${TMPDIR}/W5.out" 2>&1; then
@@ -288,7 +288,7 @@ fi
 
 # W6. FLS write denial
 if [ -n "$RESTRICTED_WRITE_USER" ]; then
-  if "$CLI" --org "$ORG" agent update "$ACME_ID" \
+  if "$CLI" agent update "$ACME_ID" \
       --run-as-user "$RESTRICTED_WRITE_USER" \
       --field "AnnualRevenue=123" \
       --json > "${TMPDIR}/W6.out" 2>&1; then

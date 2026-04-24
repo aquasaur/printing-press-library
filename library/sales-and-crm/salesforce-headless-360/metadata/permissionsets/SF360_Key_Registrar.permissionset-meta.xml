@@ -14,26 +14,6 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
-        <field>SF360_Write_Audit__c.ActingKid__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>SF360_Write_Audit__c.TargetSObject__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>SF360_Write_Audit__c.TargetRecordId__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>SF360_Write_Audit__c.Operation__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
         <field>SF360_Write_Audit__c.IntentJws__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -45,11 +25,6 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>SF360_Write_Audit__c.FieldDiff__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>SF360_Write_Audit__c.ExecutionStatus__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -90,16 +65,6 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>Case.SF360_Idempotency_Key__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>Task.SF360_Idempotency_Key__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>Event.SF360_Idempotency_Key__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <objectPermissions>
