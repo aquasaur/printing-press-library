@@ -40,6 +40,8 @@ test("install command installs binary and skill", async () => {
 
   const command = createInstallCommand({
     fetchRegistry: async () => registry,
+    resolveModulePath: async () =>
+      "github.com/mvanhorn/printing-press-library/library/sports/espn",
     detectGo: async () => ({ installed: true, version: "1.23.4" }),
     goInstall: async (modulePath, ref, env) => {
       goCalls.push({ modulePath, ref, env });
@@ -72,6 +74,7 @@ test("install command reports unknown CLIs", async () => {
   const stderr: string[] = [];
   const command = createInstallCommand({
     fetchRegistry: async () => registry,
+    resolveModulePath: async () => null,
     stderr: (message) => stderr.push(message),
   });
 
@@ -84,6 +87,7 @@ test("install command stops when Go is missing", async () => {
   const stderr: string[] = [];
   const command = createInstallCommand({
     fetchRegistry: async () => registry,
+    resolveModulePath: async () => null,
     detectGo: async (): Promise<GoDetection> => ({ installed: false }),
     goInstall: async () => {
       calls.push("goInstall");
@@ -102,6 +106,7 @@ test("install command retries go install at main when latest fails", async () =>
   const refs: string[] = [];
   const command = createInstallCommand({
     fetchRegistry: async () => registry,
+    resolveModulePath: async () => null,
     detectGo: async () => ({ installed: true }),
     goInstall: async (_modulePath, ref) => {
       refs.push(ref);
@@ -122,6 +127,7 @@ test("install command stops when binary is not on PATH", async () => {
   const stderr: string[] = [];
   const command = createInstallCommand({
     fetchRegistry: async () => registry,
+    resolveModulePath: async () => null,
     detectGo: async () => ({ installed: true }),
     goInstall: async () => ok(),
     commandOnPath: async () => null,
@@ -141,6 +147,7 @@ test("install command reports skill install failure without hiding binary", asyn
   const stderr: string[] = [];
   const command = createInstallCommand({
     fetchRegistry: async () => registry,
+    resolveModulePath: async () => null,
     detectGo: async () => ({ installed: true }),
     goInstall: async () => ok(),
     commandOnPath: async () => "/Users/example/go/bin/espn-pp-cli",
@@ -157,6 +164,7 @@ test("install command emits JSON when requested", async () => {
   const stdout: string[] = [];
   const command = createInstallCommand({
     fetchRegistry: async () => registry,
+    resolveModulePath: async () => null,
     detectGo: async () => ({ installed: true }),
     goInstall: async () => ok(),
     commandOnPath: async () => "/Users/example/go/bin/espn-pp-cli",
@@ -167,4 +175,39 @@ test("install command emits JSON when requested", async () => {
 
   assert.equal(await command(["espn", "--json"]), 0);
   assert.equal(JSON.parse(stdout[0]!).skill, "pp-espn");
+});
+
+test("install command uses go.mod module path when it differs from registry path", async () => {
+  const hubspotRegistry: Registry = {
+    schema_version: 1,
+    entries: [
+      {
+        name: "hubspot-pp-cli",
+        category: "sales-and-crm",
+        api: "HubSpot",
+        description: "CRM",
+        path: "library/sales-and-crm/hubspot",
+      },
+    ],
+  };
+  const goCalls: string[] = [];
+  const command = createInstallCommand({
+    fetchRegistry: async () => hubspotRegistry,
+    resolveModulePath: async () =>
+      "github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot-pp-cli",
+    detectGo: async () => ({ installed: true }),
+    goInstall: async (modulePath) => {
+      goCalls.push(modulePath);
+      return ok();
+    },
+    commandOnPath: async () => "/Users/example/go/bin/hubspot-pp-cli",
+    installSkill: async () => ok(),
+    stdout: () => {},
+    stderr: () => {},
+  });
+
+  assert.equal(await command(["hubspot"]), 0);
+  assert.deepEqual(goCalls, [
+    "github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot-pp-cli/cmd/hubspot-pp-cli",
+  ]);
 });

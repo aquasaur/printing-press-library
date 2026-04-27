@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cliBinaryName, cliSkillName, fetchRegistry, lookupByName, parseRegistry } from "../src/registry.js";
+import {
+  cliBinaryName,
+  cliSkillName,
+  fetchGoModulePath,
+  fetchRegistry,
+  lookupByName,
+  parseGoModulePath,
+  parseRegistry,
+} from "../src/registry.js";
 
 test("parseRegistry validates and returns registry entries", () => {
   const registry = parseRegistry({
@@ -67,16 +75,19 @@ test("fetchRegistry sends GitHub token when available", async () => {
   process.env.GITHUB_TOKEN = "test-token";
   let authHeader: string | null = null;
   try {
-    await fetchRegistry("https://example.test/registry.json", async (_url, init) => {
-      authHeader = new Headers(init?.headers).get("authorization");
-      return new Response(
-        JSON.stringify({
-          schema_version: 1,
-          entries: [],
-        }),
-        { status: 200 },
-      );
-    });
+    await fetchRegistry(
+      "https://raw.githubusercontent.com/mvanhorn/printing-press-library/main/registry.json",
+      async (_url, init) => {
+        authHeader = new Headers(init?.headers).get("authorization");
+        return new Response(
+          JSON.stringify({
+            schema_version: 1,
+            entries: [],
+          }),
+          { status: 200 },
+        );
+      },
+    );
   } finally {
     if (previous === undefined) {
       delete process.env.GITHUB_TOKEN;
@@ -86,4 +97,52 @@ test("fetchRegistry sends GitHub token when available", async () => {
   }
 
   assert.equal(authHeader, "Bearer test-token");
+});
+
+test("fetchRegistry does not send GitHub token to custom registry hosts", async () => {
+  const previous = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "test-token";
+  let authHeader: string | null = null;
+  try {
+    await fetchRegistry("https://registry.example.test/registry.json", async (_url, init) => {
+      authHeader = new Headers(init?.headers).get("authorization");
+      return new Response(JSON.stringify({ schema_version: 1, entries: [] }), { status: 200 });
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = previous;
+    }
+  }
+
+  assert.equal(authHeader, null);
+});
+
+test("fetchGoModulePath reads go.mod next to a registry entry", async () => {
+  let requestedUrl = "";
+  const modulePath = await fetchGoModulePath(
+    "library/sales-and-crm/hubspot",
+    "https://raw.githubusercontent.com/mvanhorn/printing-press-library/main/registry.json",
+    async (url) => {
+      requestedUrl = url;
+      return new Response(
+        "module github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot-pp-cli\n",
+        { status: 200 },
+      );
+    },
+  );
+
+  assert.equal(
+    requestedUrl,
+    "https://raw.githubusercontent.com/mvanhorn/printing-press-library/main/library/sales-and-crm/hubspot/go.mod",
+  );
+  assert.equal(
+    modulePath,
+    "github.com/mvanhorn/printing-press-library/library/sales-and-crm/hubspot-pp-cli",
+  );
+});
+
+test("parseGoModulePath returns null when no module declaration exists", () => {
+  assert.equal(parseGoModulePath("go 1.23\n"), null);
 });

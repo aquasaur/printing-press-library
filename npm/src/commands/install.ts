@@ -4,6 +4,7 @@ import {
   cliBinaryName,
   cliSkillName,
   DEFAULT_REGISTRY_URL,
+  fetchGoModulePath,
   fetchRegistry,
   lookupByName,
   type Registry,
@@ -18,6 +19,7 @@ interface InstallOptions {
 
 interface InstallDeps {
   fetchRegistry: (url: string) => Promise<Registry>;
+  resolveModulePath: (entryPath: string, registryUrl: string) => Promise<string | null>;
   detectGo: () => Promise<GoDetection>;
   goInstall: (modulePath: string, ref: string, env?: NodeJS.ProcessEnv) => Promise<RunResult>;
   commandOnPath: (binary: string) => Promise<string | null>;
@@ -39,6 +41,7 @@ interface InstallResult {
 export function createInstallCommand(overrides: Partial<InstallDeps> = {}) {
   const deps: InstallDeps = {
     fetchRegistry: (url) => fetchRegistry(url),
+    resolveModulePath: (entryPath, registryUrl) => fetchGoModulePath(entryPath, registryUrl),
     detectGo: () => detectGo(),
     goInstall: (modulePath, ref, env) => goInstall(modulePath, { ref, env }),
     commandOnPath: (binary) => commandOnPath(binary),
@@ -74,7 +77,10 @@ export function createInstallCommand(overrides: Partial<InstallDeps> = {}) {
       }
 
       const binary = cliBinaryName(entry);
-      const modulePath = `github.com/mvanhorn/printing-press-library/${entry.path}/cmd/${binary}`;
+      const moduleRoot =
+        (await deps.resolveModulePath(entry.path, options.registryUrl)) ??
+        `github.com/mvanhorn/printing-press-library/${entry.path}`;
+      const modulePath = `${moduleRoot}/cmd/${binary}`;
       const skillName = cliSkillName(entry);
 
       const install = await installGoWithFallback(deps, modulePath);

@@ -48,7 +48,7 @@ export async function fetchRegistry(
   url = DEFAULT_REGISTRY_URL,
   fetchImpl: RegistryFetch = fetch,
 ): Promise<Registry> {
-  const response = await fetchImpl(url, registryRequestInit());
+  const response = await fetchImpl(url, githubRequestInit(url));
   if (!response.ok) {
     const authHint =
       response.status === 404 || response.status === 401
@@ -57,6 +57,25 @@ export async function fetchRegistry(
     throw new Error(`failed to fetch registry: HTTP ${response.status}.${authHint}`);
   }
   return parseRegistry(await response.json());
+}
+
+export async function fetchGoModulePath(
+  entryPath: string,
+  registryUrl = DEFAULT_REGISTRY_URL,
+  fetchImpl: RegistryFetch = fetch,
+): Promise<string | null> {
+  const goModUrl = goModUrlForRegistryEntry(registryUrl, entryPath);
+  if (!goModUrl) {
+    return null;
+  }
+
+  const response = await fetchImpl(goModUrl, githubRequestInit(goModUrl));
+  if (!response.ok) {
+    return null;
+  }
+
+  const goMod = await response.text();
+  return parseGoModulePath(goMod);
 }
 
 export function lookupByName(registry: Registry, name: string): RegistryEntry | null {
@@ -129,9 +148,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function registryRequestInit(): RequestInit | undefined {
+export function parseGoModulePath(goMod: string): string | null {
+  for (const line of goMod.split(/\r?\n/)) {
+    const match = line.match(/^module\s+(\S+)/);
+    if (match) {
+      return match[1]!;
+    }
+  }
+  return null;
+}
+
+function goModUrlForRegistryEntry(registryUrl: string, entryPath: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(registryUrl);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname !== "raw.githubusercontent.com") {
+    return null;
+  }
+
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  if (parts.length < 4 || parts.at(-1) !== "registry.json") {
+    return null;
+  }
+
+  parsed.pathname = `/${parts.slice(0, -1).join("/")}/${entryPath}/go.mod`;
+  return parsed.toString();
+}
+
+function githubRequestInit(url: string): RequestInit | undefined {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  if (!token) {
+  if (!token || !isTrustedGitHubUrl(url)) {
     return undefined;
   }
   return {
@@ -140,4 +190,13 @@ function registryRequestInit(): RequestInit | undefined {
       "X-GitHub-Api-Version": "2022-11-28",
     },
   };
+}
+
+function isTrustedGitHubUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "raw.githubusercontent.com" || parsed.hostname === "api.github.com";
+  } catch {
+    return false;
+  }
 }
