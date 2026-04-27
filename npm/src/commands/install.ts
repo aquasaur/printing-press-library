@@ -1,12 +1,12 @@
 import { detectGo, goInstall, type GoDetection } from "../go.js";
-import { execFileRunner, type RunResult, type Runner } from "../process.js";
+import { commandOnPath, type RunResult } from "../process.js";
 import {
+  cliBinaryName,
   cliSkillName,
   DEFAULT_REGISTRY_URL,
   fetchRegistry,
   lookupByName,
   type Registry,
-  type RegistryEntry,
 } from "../registry.js";
 import { installSkill } from "../skill.js";
 
@@ -73,7 +73,7 @@ export function createInstallCommand(overrides: Partial<InstallDeps> = {}) {
         return 1;
       }
 
-      const binary = binaryName(entry);
+      const binary = cliBinaryName(entry);
       const modulePath = `github.com/mvanhorn/printing-press-library/${entry.path}/cmd/${binary}`;
       const skillName = cliSkillName(entry);
 
@@ -173,10 +173,6 @@ function parseInstallArgs(args: string[]):
   return { name, options };
 }
 
-function binaryName(entry: RegistryEntry): string {
-  return entry.name.endsWith("-pp-cli") ? entry.name : `${entry.name}-pp-cli`;
-}
-
 async function installGoWithFallback(deps: InstallDeps, modulePath: string): Promise<RunResult> {
   const latest = await deps.goInstall(modulePath, "latest");
   if (latest.code === 0) {
@@ -204,15 +200,6 @@ function combineFailures(latest: RunResult, main: RunResult): RunResult {
       .filter(Boolean)
       .join("\n"),
   };
-}
-
-async function commandOnPath(binary: string, runner: Runner = execFileRunner): Promise<string | null> {
-  const command = process.platform === "win32" ? "where" : "which";
-  const result = await runner(command, [binary]);
-  if (result.code !== 0) {
-    return null;
-  }
-  return result.stdout.split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? null;
 }
 
 function goMissingMessage(platform: NodeJS.Platform): string {

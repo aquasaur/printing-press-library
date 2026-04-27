@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { skillSource, skillsAddArgs } from "../src/skill.js";
+import { skillSource, skillsAddArgs, skillsRemoveArgs } from "../src/skill.js";
 
 test("skillSource points at the cli-skills namespace", () => {
   assert.equal(
@@ -21,5 +21,18 @@ test("skillsAddArgs uses unattended skills add with optional agents", () => {
     "claude-code",
     "-a",
     "codex",
+  ]);
+});
+
+test("skillsRemoveArgs uses unattended global remove", () => {
+  assert.deepEqual(skillsRemoveArgs("pp-espn", { agents: ["claude-code"] }), [
+    "-y",
+    "skills@latest",
+    "remove",
+    "pp-espn",
+    "-g",
+    "-y",
+    "-a",
+    "claude-code",
   ]);
 });

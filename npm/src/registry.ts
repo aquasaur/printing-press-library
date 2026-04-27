@@ -25,6 +25,8 @@ export interface Registry {
   entries: RegistryEntry[];
 }
 
+type RegistryFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
 export function parseRegistry(value: unknown): Registry {
   if (!isRecord(value)) {
     throw new Error("registry payload must be an object");
@@ -44,11 +46,15 @@ export function parseRegistry(value: unknown): Registry {
 
 export async function fetchRegistry(
   url = DEFAULT_REGISTRY_URL,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: RegistryFetch = fetch,
 ): Promise<Registry> {
-  const response = await fetchImpl(url);
+  const response = await fetchImpl(url, registryRequestInit());
   if (!response.ok) {
-    throw new Error(`failed to fetch registry: HTTP ${response.status}`);
+    const authHint =
+      response.status === 404 || response.status === 401
+        ? " If the catalog repository is private, set GITHUB_TOKEN or GH_TOKEN."
+        : "";
+    throw new Error(`failed to fetch registry: HTTP ${response.status}.${authHint}`);
   }
   return parseRegistry(await response.json());
 }
@@ -65,6 +71,10 @@ export function lookupByName(registry: Registry, name: string): RegistryEntry | 
 
 export function cliSkillName(entry: RegistryEntry): string {
   return `pp-${entry.name.replace(/-pp-cli$/, "")}`;
+}
+
+export function cliBinaryName(entry: RegistryEntry): string {
+  return entry.name.endsWith("-pp-cli") ? entry.name : `${entry.name}-pp-cli`;
 }
 
 function parseRegistryEntry(value: unknown): RegistryEntry {
@@ -117,4 +127,17 @@ function requiredNumber(value: Record<string, unknown>, key: string): number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function registryRequestInit(): RequestInit | undefined {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (!token) {
+    return undefined;
+  }
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  };
 }

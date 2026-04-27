@@ -35,3 +35,16 @@ export const execFileRunner: Runner = (command, args, options = {}) => {
     );
   });
 };
+
+export async function commandOnPath(
+  binary: string,
+  runner: Runner = execFileRunner,
+  platform: NodeJS.Platform = process.platform,
+): Promise<string | null> {
+  const command = platform === "win32" ? "where" : "which";
+  const result = await runner(command, [binary]);
+  if (result.code !== 0) {
+    return null;
+  }
+  return result.stdout.split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? null;
+}

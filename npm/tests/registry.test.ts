@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cliSkillName, lookupByName, parseRegistry } from "../src/registry.js";
+import { cliBinaryName, cliSkillName, fetchRegistry, lookupByName, parseRegistry } from "../src/registry.js";
 
 test("parseRegistry validates and returns registry entries", () => {
   const registry = parseRegistry({
@@ -55,8 +55,35 @@ test("cliSkillName preserves pp- naming convention", () => {
   });
 
   assert.equal(cliSkillName(registry.entries[0]!), "pp-dominos");
+  assert.equal(cliBinaryName(registry.entries[0]!), "dominos-pp-cli");
 });
 
 test("parseRegistry rejects unsupported schema versions", () => {
   assert.throws(() => parseRegistry({ schema_version: 2, entries: [] }), /unsupported registry/);
+});
+
+test("fetchRegistry sends GitHub token when available", async () => {
+  const previous = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "test-token";
+  let authHeader: string | null = null;
+  try {
+    await fetchRegistry("https://example.test/registry.json", async (_url, init) => {
+      authHeader = new Headers(init?.headers).get("authorization");
+      return new Response(
+        JSON.stringify({
+          schema_version: 1,
+          entries: [],
+        }),
+        { status: 200 },
+      );
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = previous;
+    }
+  }
+
+  assert.equal(authHeader, "Bearer test-token");
 });

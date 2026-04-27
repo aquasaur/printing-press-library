@@ -23,3 +23,16 @@ export async function installSkill(skillName: string, options: InstallSkillOptio
   const runner = options.runner ?? execFileRunner;
   return runner("npx", skillsAddArgs(skillName, options));
 }
+
+export function skillsRemoveArgs(skillName: string, options: InstallSkillOptions = {}): string[] {
+  const args = ["-y", "skills@latest", "remove", skillName, "-g", "-y"];
+  for (const agent of options.agents ?? []) {
+    args.push("-a", agent);
+  }
+  return args;
+}
+
+export async function removeSkill(skillName: string, options: InstallSkillOptions = {}) {
+  const runner = options.runner ?? execFileRunner;
+  return runner("npx", skillsRemoveArgs(skillName, options));
+}
