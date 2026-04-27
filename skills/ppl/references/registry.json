@@ -84,19 +84,19 @@
       "name": "dub",
       "category": "marketing",
       "api": "Dub",
-      "description": "Create short links, track analytics, manage domains, and run affiliate programs via the Dub API",
+      "description": "Manage Dub short links, analytics, partner programs, and conversion tracking from the terminal. Local SQLite store unlocks dead-link detection, performance drift, conversion funnels, partner leaderboards, and cross-tag analytics.",
       "path": "library/marketing/dub",
       "mcp": {
         "binary": "dub-pp-mcp",
         "transport": "stdio",
-        "tool_count": 50,
+        "tool_count": 53,
         "public_tool_count": 0,
-        "auth_type": "api_key",
+        "auth_type": "bearer_token",
         "env_vars": [
           "DUB_TOKEN"
         ],
         "mcp_ready": "full",
-        "manifest_checksum": "sha256:c55f10f8cab350320609c2463dd83bf073d102661bd2b741dc5d6697f48fca8d",
+        "manifest_checksum": "sha256:91c4a4d3c43852b3c22ca06f06c4eb3aafd3f5770200e04485cd0e37100b6685",
         "spec_format": "openapi3",
         "manifest_url": "library/marketing/dub/tools-manifest.json"
       }
@@ -133,6 +133,25 @@
         ],
         "mcp_ready": "full",
         "spec_format": "openapi3"
+      }
+    },
+    {
+      "name": "food52",
+      "category": "food-and-dining",
+      "api": "Food52",
+      "description": "Search, browse, and read Food52 from your terminal \u2014 with offline FTS, pantry matching, recipe scaling, and the editorial signals other tools throw away.",
+      "path": "library/food-and-dining/food52",
+      "mcp": {
+        "binary": "food52-pp-mcp",
+        "transport": "stdio",
+        "tool_count": 4,
+        "public_tool_count": 4,
+        "auth_type": "none",
+        "env_vars": [],
+        "mcp_ready": "full",
+        "manifest_checksum": "sha256:0aac560f4b5fdefe708cab36ed80612a83f168af3f5903946b6e03963df288e4",
+        "spec_format": "internal",
+        "manifest_url": "library/food-and-dining/food52/tools-manifest.json"
       }
     },
     {

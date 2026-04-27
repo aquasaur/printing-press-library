@@ -1,291 +1,427 @@
 ---
 name: pp-dub
-description: "Use this skill whenever the user wants to create, manage, or analyze short links; track click analytics; manage domains; generate QR codes; run affiliate/partner programs; handle commissions or payouts; or work with the Dub link-management platform. Dub CLI covering links, analytics, domains, QR codes, folders, tags, partners, bounties, commissions, and payouts. Requires a Dub API token. Triggers on phrasings like 'create a short link for this URL', 'how many clicks did my campaign get last week', 'generate a QR code for this link', 'pay out partners for March', 'which links are my top performers'."
+description: "Every Dub operation, plus the local-store features no Dub tool — official or community — has ever shipped. Trigger phrases: `shorten this URL with dub`, `list my dub links`, `audit dub partner commissions`, `find dead dub links`, `check dub campaign performance`, `use dub`, `run dub`."
 argument-hint: "<command> [args] | install cli|mcp"
 allowed-tools: "Read Bash"
-metadata: '{"openclaw":{"requires":{"bins":["dub-pp-cli"],"env":["DUB_API_KEY"]},"primaryEnv":"DUB_API_KEY","install":[{"id":"go","kind":"shell","command":"go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-cli@latest","bins":["dub-pp-cli"],"label":"Install via go install"}]}}'
+metadata: '{"openclaw":{"requires":{"bins":["dub-pp-cli"]},"install":[{"id":"go","kind":"shell","command":"go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-cli@latest","bins":["dub-pp-cli"],"label":"Install via go install"}]}}'
 ---
 
 # Dub — Printing Press CLI
 
-Create short links, track analytics, manage domains, and run affiliate/partner programs via the Dub API. Full coverage of links, analytics, domains, QR codes, folders, tags, partners, bounties, commissions, and payouts. Agent-native output on every command; offline SQLite sync for bulk analytics.
+Manage Dub short links, analytics, partner programs, and conversion tracking from the terminal. A local SQLite store unlocks dead-link detection, performance drift, conversion funnels, partner leaderboards, and cross-tag analytics — without burning the rate-limit budget. Every command is agent-native: --json, --select, --dry-run, typed exit codes.
 
 ## When to Use This CLI
 
-Reach for this when the user wants to:
-
-- Create or update short links (marketing campaigns, affiliate tracking, one-off redirects)
-- Analyze link performance (clicks, unique visitors, geographic breakdown, referrer data)
-- Manage an affiliate or partner program (bounties, commissions, payouts, leaderboards)
-- Bulk-ship links for a launch or campaign
-- Generate QR codes for print / physical campaigns
-
-Don't reach for this if the user just needs a one-off random short link without tracking — a no-auth service is faster. Dub earns its complexity when the user actually wants the analytics and partner-program layers.
+Reach for this CLI when you need to audit, bulk-modify, or cross-analyze Dub assets in ways the web UI doesn't support. Especially good for campaign-wide UTM rewrites with --dry-run preview, partner-program audits, dead-link cleanup, conversion funnel attribution, and analytics queries an agent wants to compose with --json + --select.
 
 ## Unique Capabilities
 
-These commands reward the combination of link management + partner ops + analytics.
+These capabilities aren't available in any other tool for this API.
 
-### Bulk operations
+### Local state that compounds
 
-- **`links bulk-create`** / **`bulk-update`** / **`bulk-delete`** — Atomic multi-link operations. Handles transactional rollback on partial failure.
+- **`links stale`** — Find archived, expired, or zero-traffic links across the workspace before they pile up. Joins local link metadata with analytics aggregates the API doesn't expose together.
 
-  _One command to ship 500 links for a campaign. Dub's API has bulk endpoints; this surfaces them as first-class CLI commands._
+  _Pick up cleanup work without round-tripping every link's analytics endpoint individually._
 
-- **`links duplicates`** / **`stale`** — Find duplicate destinations or links nobody's clicked in N days. Inventory-hygiene tools that don't exist in the web dashboard.
+  ```bash
+  dub-pp-cli links stale --days 90 --json
+  ```
+- **`links drift`** — Detect links whose click rate dropped more than threshold percent week-over-week. Catches dying campaigns before reporting deadlines.
 
-### Analytics slicing
+  _Pre-emptive alerting on silent campaign collapse — catches issues before someone notices traffic is gone._
 
-- **`analytics`** — Multi-dimensional analytics with flexible `--group-by` (country, device, referrer, tag, folder, date).
+  ```bash
+  dub-pp-cli links drift --window 7d --threshold 30 --json
+  ```
+- **`campaigns`** — Performance dashboard aggregated by tag — clicks, leads, sales rolled up across every link wearing each tag.
 
-- **`events`** — Raw click event stream. Pipe into jq for custom slicing.
+  _Campaign-level view of what's actually working without manual rollup spreadsheets._
 
-- **`tags analytics`** — Aggregate analytics for every link with a given tag.
+  ```bash
+  dub-pp-cli campaigns --interval 30d --json
+  ```
+- **`funnel`** — Click-to-lead-to-sale conversion rates per link or campaign. Surfaces where prospects drop off in the funnel.
 
-- **`domains report`** — Per-domain performance summary.
+  _Attribution debugging without exporting to a BI tool._
 
-- **`customers journey`** — Customer-journey analytics: what path did a unique visitor take through your links.
+  ```bash
+  dub-pp-cli funnel --link link_xyz --json
+  ```
+- **`customers journey`** — See every link a customer clicked, when they became a lead, and when they purchased — in one timeline.
 
-- **`partners leaderboard`** — Top-performing partners by conversions.
+  _Single-pane-of-glass attribution for one customer instead of stitching four endpoints._
 
-- **`funnel`** — Conversion funnel from click → signup → purchase (when conversion tracking is enabled).
+  ```bash
+  dub-pp-cli customers journey --customer cus_xyz --json
+  ```
+- **`partners leaderboard`** — Rank partners by commission earned, conversion rate, and clicks generated. Find your top performers and dormant partners.
 
-### Partner program ops
+  _Partner-program health at a glance without four separate API calls._
 
-- **`bounties`** — Create, list, approve, reject bounty submissions.
+  ```bash
+  dub-pp-cli partners leaderboard --by commission --interval 30d --json
+  ```
 
-- **`commissions`** — Track commissions per partner.
+### Hygiene and safety
 
-- **`payouts`** — Run payouts to partners (preview with `--dry-run`).
+- **`links duplicates`** — Find every link in the workspace pointing to the same destination URL. Surfaces accidental duplicates and consolidation candidates.
 
-- **`partners`** — Partner CRUD + ban/unban.
+  _Catches accidental duplicates that fragment analytics and waste short-link slugs._
 
-- **`campaigns`** — Campaign management (groups partners + links + bounties).
+  ```bash
+  dub-pp-cli links duplicates --json --select url,count,short_links
+  ```
+- **`links lint`** — Audit short-key slugs for lookalike collisions, reserved-word violations, and brand-conflict hazards across domains.
 
-### Integration utility
+  _Catches typo-shaped redirects and ambiguous aliases before they ship to a campaign._
 
-- **`qr`** — Generate QR codes for any short link (PNG or SVG).
+  ```bash
+  dub-pp-cli links lint --json
+  ```
+- **`links rewrite`** — Show every link that would change and the exact patch BEFORE sending. Mass UTM or domain migrations with dry-run safety.
 
-- **`track`** — Ingest custom conversion events from external sources.
+  _Campaign-wide rewrites without blast-radius mistakes._
 
-- **`folders`** / **`tags`** — Organizational primitives for large link portfolios.
+  ```bash
+  dub-pp-cli links rewrite --match 'utm_source=oldsrc' --replace 'utm_source=newsrc' --dry-run
+  ```
+- **`partners audit-commissions`** — Reconcile partners, commissions, bounties, and payouts to flag stale rates, missing payouts, and expired bounties still earning.
 
-- **`search`** — Full-text search across synced data.
+  _Partner-program audit that would otherwise be four API calls plus a spreadsheet._
+
+  ```bash
+  dub-pp-cli partners audit-commissions --json
+  ```
+- **`domains report`** — Per-domain link count and click distribution. Surfaces over- and under-used custom domains.
+
+  _See which custom domains are pulling weight before renewal time._
+
+  ```bash
+  dub-pp-cli domains report --json
+  ```
+- **`health`** — Cross-resource Monday-morning report: rate-limit headroom, expired-but-active links, dead destination URLs, unverified domains, dormant tags.
+
+  _One command instead of five to triage workspace health._
+
+  ```bash
+  dub-pp-cli health --json
+  ```
+
+### Agent-native plumbing
+
+- **`since`** — What happened in the last N hours? Created, updated, deleted links plus partner approvals and top-clicked entities.
+
+  _Powers agent 'what changed' flows without polling a dozen list endpoints._
+
+  ```bash
+  dub-pp-cli since 24h --json
+  ```
+- **`tail`** — Stream live changes by polling the API at regular intervals. Watch new clicks, leads, and sales as they happen.
+
+  _Watch a campaign launch in real time without refreshing the dashboard._
+
+  ```bash
+  dub-pp-cli tail --interval 10s
+  ```
 
 ## Command Reference
 
-Links:
+**analytics** — Manage analytics
 
-- `dub-pp-cli links` — List / get / update
-- `dub-pp-cli links create` — Create a single link
-- `dub-pp-cli links bulk-create | bulk-update | bulk-delete` — Bulk ops
-- `dub-pp-cli links duplicates` / `stale` — Hygiene
-- `dub-pp-cli qr <linkId>` — QR code generation
+- `dub-pp-cli analytics retrieve` — Retrieve analytics for a link, a domain, or the authenticated workspace.
 
-Analytics:
+**bounties** — Manage bounties
 
-- `dub-pp-cli analytics [--group-by …]` — Multi-dim analytics
-- `dub-pp-cli events` — Raw event stream
-- `dub-pp-cli funnel` — Conversion funnel
-- `dub-pp-cli tags analytics` — Tag-scoped analytics
-- `dub-pp-cli domains report` — Per-domain report
-- `dub-pp-cli customers journey` — Per-customer path
 
-Partners / Commissions:
+**commissions** — Manage commissions
 
-- `dub-pp-cli partners [leaderboard|ban|approve]`
-- `dub-pp-cli bounties [list|approve-bounty|ban]`
-- `dub-pp-cli commissions`
-- `dub-pp-cli payouts [--dry-run]`
-- `dub-pp-cli campaigns`
+- `dub-pp-cli commissions bulk-update` — Bulk update commissions
+- `dub-pp-cli commissions list` — List all commissions
+- `dub-pp-cli commissions update` — Update a commission
 
-Organization:
+**customers** — Manage customers
 
-- `dub-pp-cli folders` — Folder CRUD
-- `dub-pp-cli tags` — Tag CRUD
-- `dub-pp-cli domains` — Domain management
+- `dub-pp-cli customers delete` — Delete a customer
+- `dub-pp-cli customers get` — List all customers
+- `dub-pp-cli customers get-id` — Retrieve a customer
+- `dub-pp-cli customers update` — Update a customer
 
-Auth / utility:
+**domains** — Manage domains
 
-- `dub-pp-cli auth set-token <DUB_API_KEY>`
-- `dub-pp-cli tokens` — Manage API tokens (admin)
-- `dub-pp-cli sync` / `export` / `import` / `archive` — Local store
-- `dub-pp-cli search <query>` — Full-text search
-- `dub-pp-cli doctor` — Verify
-- `dub-pp-cli tail` — Live event log
+- `dub-pp-cli domains check-status` — Check the availability of one or more domains
+- `dub-pp-cli domains create` — Create a domain
+- `dub-pp-cli domains delete` — Delete a domain
+- `dub-pp-cli domains list` — List all domains
+- `dub-pp-cli domains register` — Register a domain
+- `dub-pp-cli domains update` — Update a domain
+
+**events** — Manage events
+
+- `dub-pp-cli events list` — List all events
+
+**folders** — Manage folders
+
+- `dub-pp-cli folders create` — Create a folder
+- `dub-pp-cli folders delete` — Delete a folder
+- `dub-pp-cli folders list` — List all folders
+- `dub-pp-cli folders update` — Update a folder
+
+**links** — Manage links
+
+- `dub-pp-cli links bulk-create` — Bulk create links
+- `dub-pp-cli links bulk-delete` — Bulk delete links
+- `dub-pp-cli links bulk-update` — Bulk update links
+- `dub-pp-cli links create` — Create a link
+- `dub-pp-cli links delete` — Delete a link
+- `dub-pp-cli links get` — List all links
+- `dub-pp-cli links get-count` — Retrieve links count
+- `dub-pp-cli links get-info` — Retrieve a link
+- `dub-pp-cli links update` — Update a link
+- `dub-pp-cli links upsert` — Upsert a link
+
+**partners** — Manage partners
+
+- `dub-pp-cli partners approve` — Approve a partner application
+- `dub-pp-cli partners ban` — Ban a partner
+- `dub-pp-cli partners create` — Create or update a partner
+- `dub-pp-cli partners create-link` — Create a link for a partner
+- `dub-pp-cli partners deactivate` — Deactivate a partner
+- `dub-pp-cli partners list` — List all partners
+- `dub-pp-cli partners list-applications` — List all pending partner applications
+- `dub-pp-cli partners reject` — Reject a partner application
+- `dub-pp-cli partners retrieve-analytics` — Retrieve analytics for a partner
+- `dub-pp-cli partners retrieve-links` — Retrieve a partner's links.
+- `dub-pp-cli partners upsert-link` — Upsert a link for a partner
+
+**payouts** — Manage payouts
+
+- `dub-pp-cli payouts list` — List all payouts
+
+**qr** — Manage qr
+
+- `dub-pp-cli qr` — Retrieve a QR code (leaf shortcut for the `qr/get-qrcode` operation)
+
+**tags** — Manage tags
+
+- `dub-pp-cli tags create` — Create a tag
+- `dub-pp-cli tags delete` — Delete a tag
+- `dub-pp-cli tags get` — List all tags
+- `dub-pp-cli tags update` — Update a tag
+
+**tokens** — Manage tokens
+
+- `dub-pp-cli tokens` — Create a referrals embed token (leaf shortcut for the `tokens/embed/referrals/links` operation)
+
+**track** — Manage track
+
+- `dub-pp-cli track lead` — Track a lead
+- `dub-pp-cli track open` — Track a deep link open event
+- `dub-pp-cli track sale` — Track a sale
+
+
+### Finding the right command
+
+When you know what you want to do but not which command does it, ask the CLI directly:
+
+```bash
+dub-pp-cli which "<capability in your own words>"
+```
+
+`which` resolves a natural-language capability query to the best matching command from this CLI's curated feature index. Exit code `0` means at least one match; exit code `2` means no confident match — fall back to `--help` or use a narrower query.
 
 ## Recipes
 
-### Ship 200 links for a launch
+
+### Find links nobody clicks
 
 ```bash
-cat launch-links.jsonl | dub-pp-cli links bulk-create --domain dub.sh --agent
+dub-pp-cli links stale --days 90 --json --select id,domain,key,url,clicks
 ```
 
-One atomic request, transactional rollback if any link fails validation. Much faster than 200 individual creates.
+Surfaces archive candidates from the local store with no extra API calls.
 
-### Weekly campaign analytics
+### Audit campaign drift
 
 ```bash
-# Analytics retrieve with a time window and group-by dimension:
-dub-pp-cli analytics retrieve --interval 7d --group-by country --agent
-dub-pp-cli analytics retrieve --interval 7d --group-by device --agent
-
-# Tag-level rollup aggregates EVERY tag — filter client-side for "q4-launch":
-dub-pp-cli tags analytics --agent | jq '.[] | select(.tag_name=="q4-launch")'
+dub-pp-cli links drift --window 7d --threshold 30 --json
 ```
 
-`analytics retrieve` is the API-backed analytics call with `--interval` (time window) and `--group-by` (country, device, referrer, etc.). `tags analytics` is a local-DB rollup over all tags — jq filters to the campaign tag. The top-level `dub-pp-cli analytics` command is a different thing: it summarizes locally-synced data and uses `--type`, not `--interval`.
+Flags any link whose week-over-week click rate dropped by 30% or more.
 
-### Partner program month-end
+### Top campaigns by tag
 
 ```bash
-dub-pp-cli commissions --interval 30d --agent          # what's owed (last 30 days)
-dub-pp-cli payouts --status pending --agent            # list pending payouts
-dub-pp-cli payouts create --partner-id <id> --agent    # create a payout (per partner)
-dub-pp-cli partners leaderboard --sort earnings --limit 25 --agent
+dub-pp-cli campaigns --interval 30d --agent --select tag,total_clicks,total_leads,total_sales
 ```
 
-`commissions` supports `--interval` for time-windowing. `payouts` is scoped by status or partner; the leaderboard is aggregated from synced data and ranks by earnings/clicks/sales/commissions/name. For bulk previews, use `--dry-run` (universal) on mutation commands.
+Joins local taxonomy with analytics and narrows agent context to the columns it needs.
 
-### Find stale links eating domain budget
+### Dry-run a mass UTM rewrite
 
 ```bash
-dub-pp-cli links stale --days 90 --agent
-dub-pp-cli links bulk-delete --link-ids "$(dub-pp-cli links stale --days 90 --agent | jq -r '.[].id' | paste -sd, -)" --dry-run
+dub-pp-cli links rewrite --match 'utm_source=oldsrc' --replace 'utm_source=newsrc' --dry-run
 ```
 
-Identify links nobody's clicked in 90 days, then preview a bulk delete (`--link-ids` is a comma-separated list, max 100 per call). Domain-hygiene task that's hard to do in the web UI.
+See every link that would change before sending the bulk patch.
+
+### Workspace Monday-morning health
+
+```bash
+dub-pp-cli health --json
+```
+
+One command to audit rate-limit headroom, dead destinations, and verification state.
+
+### Single-customer funnel timeline
+
+```bash
+dub-pp-cli customers journey --customer cus_xyz --json
+```
+
+Every click, lead, and sale for one customer in chronological order.
 
 ## Auth Setup
 
-Requires a Dub API token.
+Dub uses workspace-scoped API keys. Get one at https://app.dub.co/settings/tokens and export it as `DUB_TOKEN` (or `DUB_API_KEY` — both names are accepted). The CLI checks for the key on every command and `dub-pp-cli doctor` confirms it reaches the API. For self-hosted Dub, override the base URL with `DUB_BASE_URL=https://api.your-instance.com`.
 
-```bash
-# Get a token: https://app.dub.co/settings/tokens
-export DUB_API_KEY="dub_xxx"
-dub-pp-cli auth set-token "$DUB_API_KEY"
-dub-pp-cli doctor
-```
+Run `dub-pp-cli doctor` to verify setup.
 
-Optional:
-- `DUB_BASE_URL` — override API base (for self-hosted or region-specific endpoints)
-- `DUB_WORKSPACE` — default workspace slug
+## When NOT to use this CLI
+
+Anti-triggers — pick a different tool when the user asks for:
+
+- **Generic URL shortening** that isn't tied to a Dub workspace (try `bit.ly`, `is.gd`, or another short-link service)
+- **Non-Dub link analytics** (Google Analytics, Mixpanel, Amplitude)
+- **Posting to social media** with the short link (this CLI doesn't publish — it just creates and tracks)
+- **Customer-data exports for non-Dub systems** (Stripe, HubSpot, Segment have their own CLIs)
+- **Email or SMS delivery of links** (delivery is a separate concern)
+- **Real-time webhooks or webhook delivery introspection** (Dub manages webhooks via the dashboard, not this CLI)
 
 ## Agent Mode
 
-Add `--agent` to any command. Expands to `--json --compact --no-input --no-color --yes`. Universal flags: `--select`, `--dry-run`, `--rate-limit N`, `--no-cache`.
+Add `--agent` to any command. Expands to: `--json --compact --no-input --no-color --yes`.
 
-Flag glossary:
-- `--data-source auto|live|local` — read from live API, local sync, or let the CLI decide
-- `--interval <duration>` — analytics time window (7d, 30d, etc.)
-- `--group-by <field>` — analytics aggregation dimension
+- **Pipeable** — JSON on stdout, errors on stderr
+- **Filterable** — `--select` keeps a subset of fields. Dotted paths descend into nested structures; arrays traverse element-wise. Critical for keeping context small on verbose APIs:
 
-### Filtering output
-
-`--select` accepts dotted paths to descend into nested responses; arrays traverse element-wise:
-
-```bash
-dub-pp-cli <command> --agent --select id,name
-dub-pp-cli <command> --agent --select items.id,items.owner.name
-```
-
-Use this to narrow huge payloads to the fields you actually need — critical for deeply nested API responses.
-
+  ```bash
+  dub-pp-cli commissions list --agent --select id,name,status
+  ```
+- **Previewable** — `--dry-run` shows the request without sending
+- **Offline-friendly** — sync/search commands can use the local SQLite store when available
+- **Non-interactive** — never prompts, every input is a flag
 
 ### Response envelope
 
-Data-layer commands wrap output in `{"meta": {...}, "results": <data>}`. Parse `.results` for data and `.meta.source` to know whether it's `live` or local. The `N results (live)` summary is printed to stderr only when stdout is a TTY; piped/agent consumers see pure JSON on stdout.
+Commands that read from the local store or the API wrap output in a provenance envelope:
+
+```json
+{
+  "meta": {"source": "live" | "local", "synced_at": "...", "reason": "..."},
+  "results": <data>
+}
+```
+
+Parse `.results` for data and `.meta.source` to know whether it's live or local. A human-readable `N results (live)` summary is printed to stderr only when stdout is a terminal — piped/agent consumers get pure JSON on stdout.
+
+## Agent Feedback
+
+When you (or the agent) notice something off about this CLI, record it:
+
+```
+dub-pp-cli feedback "the --since flag is inclusive but docs say exclusive"
+dub-pp-cli feedback --stdin < notes.txt
+dub-pp-cli feedback list --json --limit 10
+```
+
+Entries are stored locally at `~/.dub-pp-cli/feedback.jsonl`. They are never POSTed unless `DUB_FEEDBACK_ENDPOINT` is set AND either `--send` is passed or `DUB_FEEDBACK_AUTO_SEND=true`. Default behavior is local-only.
+
+Write what *surprised* you, not a bug report. Short, specific, one line: that is the part that compounds.
+
+## Output Delivery
+
+Every command accepts `--deliver <sink>`. The output goes to the named sink in addition to (or instead of) stdout, so agents can route command results without hand-piping. Three sinks are supported:
+
+| Sink | Effect |
+|------|--------|
+| `stdout` | Default; write to stdout only |
+| `file:<path>` | Atomically write output to `<path>` (tmp + rename) |
+| `webhook:<url>` | POST the output body to the URL (`application/json` or `application/x-ndjson` when `--compact`) |
+
+Unknown schemes are refused with a structured error naming the supported set. Webhook failures return non-zero and log the URL + HTTP status on stderr.
+
+## Named Profiles
+
+A profile is a saved set of flag values, reused across invocations. Use it when a scheduled agent calls the same command every run with the same configuration - HeyGen's "Beacon" pattern.
+
+```
+dub-pp-cli profile save briefing --json
+dub-pp-cli --profile briefing commissions list
+dub-pp-cli profile list --json
+dub-pp-cli profile show briefing
+dub-pp-cli profile delete briefing --yes
+```
+
+Explicit flags always win over profile values; profile values win over defaults. `agent-context` lists all available profiles under `available_profiles` so introspecting agents discover them at runtime.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 2 | Usage error |
-| 3 | Not found (link, partner, domain) |
-| 4 | Auth required |
-| 5 | API error |
-| 7 | Rate limited |
+| 2 | Usage error (wrong arguments) |
+| 3 | Resource not found |
+| 4 | Authentication required |
+| 5 | API error (upstream issue) |
+| 7 | Rate limited (wait and retry) |
 | 10 | Config error |
-
-## Installation
-
-### CLI
-
-```bash
-go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-cli@latest
-
-# If `@latest` installs a stale build (Go module proxy cache lag), install from main:
-GOPRIVATE='github.com/mvanhorn/*' GOFLAGS=-mod=mod \
-  go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-cli@main
-dub-pp-cli auth set-token YOUR_DUB_API_KEY
-dub-pp-cli doctor
-```
-
-### MCP Server
-
-```bash
-go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-mcp@latest
-
-# If `@latest` installs a stale build (Go module proxy cache lag), install from main:
-GOPRIVATE='github.com/mvanhorn/*' GOFLAGS=-mod=mod \
-  go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-mcp@main
-claude mcp add -e DUB_API_KEY=<key> dub-pp-mcp -- dub-pp-mcp
-```
 
 ## Argument Parsing
 
-Given `$ARGUMENTS`:
+Parse `$ARGUMENTS`:
 
-1. **Empty, `help`, or `--help`** → run `dub-pp-cli --help`
-2. **`install`** → CLI; **`install mcp`** → MCP
-3. **Anything else** → check `which dub-pp-cli` (install if missing), verify `DUB_API_KEY` is set (prompt for setup if not), route by intent: short-link creation → `links create`; analytics lookup → `analytics` or `tags analytics`; partner ops → `partners` / `commissions` / `payouts`. Run with `--agent`.
+1. **Empty, `help`, or `--help`** → show `dub-pp-cli --help` output
+2. **Starts with `install`** → ends with `mcp` → MCP installation; otherwise → CLI installation
+3. **Anything else** → Direct Use (execute as CLI command with `--agent`)
 
-<!-- pr-218-features -->
-## Agent Workflow Features
+## CLI Installation
 
-This CLI exposes three shared agent-workflow capabilities patched in from cli-printing-press PR #218.
+1. Check Go is installed: `go version` (requires Go 1.23+)
+2. Install:
+   ```bash
+   go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-cli@latest
+   
+   # If `@latest` installs a stale build (Go module proxy cache lag), install from main:
+   GOPRIVATE='github.com/mvanhorn/*' GOFLAGS=-mod=mod \
+     go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-cli@main
+   ```
+3. Verify: `dub-pp-cli --version`
+4. Ensure `$GOPATH/bin` (or `$HOME/go/bin`) is on `$PATH`.
 
-### Named profiles
+## MCP Server Installation
 
-Persist a set of flags under a name and reuse them across invocations.
+1. Install the MCP server:
+   ```bash
+   go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-mcp@latest
+   
+   # If `@latest` installs a stale build (Go module proxy cache lag), install from main:
+   GOPRIVATE='github.com/mvanhorn/*' GOFLAGS=-mod=mod \
+     go install github.com/mvanhorn/printing-press-library/library/marketing/dub/cmd/dub-pp-mcp@main
+   ```
+2. Register with Claude Code:
+   ```bash
+   claude mcp add dub-pp-mcp -- dub-pp-mcp
+   ```
+3. Verify: `claude mcp list`
 
-```bash
-# Save the current non-default flags as a named profile
-dub-pp-cli profile save <name>
+## Direct Use
 
-# Use a profile — overlays its values onto any flag you don't set explicitly
-dub-pp-cli --profile <name> <command>
-
-# List / inspect / remove
-dub-pp-cli profile list
-dub-pp-cli profile show <name>
-dub-pp-cli profile delete <name> --yes
-```
-
-Flag precedence: explicit flag > env var > profile > default.
-
-### --deliver
-
-Route command output to a sink other than stdout. Useful when an agent needs to hand a result to a file, a webhook, or another process without plumbing.
-
-```bash
-dub-pp-cli <command> --deliver file:/path/to/out.json
-dub-pp-cli <command> --deliver webhook:https://hooks.example/in
-```
-
-File sinks write atomically (tmp + rename). Webhook sinks POST `application/json` (or `application/x-ndjson` when `--compact` is set). Unknown schemes produce a structured refusal listing the supported set.
-
-### feedback
-
-Record in-band feedback about this CLI from the agent side of the loop. Local-only by default; safe to call without configuration.
-
-```bash
-dub-pp-cli feedback "what surprised you or tripped you up"
-dub-pp-cli feedback list         # show local entries
-dub-pp-cli feedback clear --yes  # wipe
-```
-
-Entries append to `~/.dub-pp-cli/feedback.jsonl` as JSON lines. When `DUB_FEEDBACK_ENDPOINT` is set and either `--send` is passed or `DUB_FEEDBACK_AUTO_SEND=true`, the entry is also POSTed upstream (non-blocking — local write always succeeds).
-
+1. Check if installed: `which dub-pp-cli`
+   If not found, offer to install (see CLI Installation above).
+2. Match the user query to the best command from the Unique Capabilities and Command Reference above.
+3. Execute with the `--agent` flag:
+   ```bash
+   dub-pp-cli <command> [subcommand] [args] --agent
+   ```
+4. If ambiguous, drill into subcommand help: `dub-pp-cli <command> --help`.
