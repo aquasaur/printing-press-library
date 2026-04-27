@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-26T15:00:17.208248Z",
+  "printing_press_version": "2.3.7",
+  "api_name": "open-meteo",
+  "cli_name": "open-meteo-pp-cli",
+  "spec_path": "/tmp/open-meteo-spec.yaml",
+  "spec_format": "openapi3",
+  "spec_checksum": "sha256:aa1cf4a1c9f4a0a53c9326696596d067e6802c4fb01d3fe36a7611ad7419a9ad",
+  "mcp_binary": "open-meteo-pp-mcp",
+  "mcp_tool_count": 1,
+  "mcp_ready": "full",
+  "api_version": "1.0",
+  "auth_type": "api_key",
+  "auth_env_vars": [
+    "OPEN_METEO_APIS_API_KEY"
+  ],
+  "novel_features": [
+    {
+      "name": "Forecast workflow",
+      "command": "forecast",
+      "description": "Get a seven-day weather forecast for coordinates from the Open-Meteo API."
+    },
+    {
+      "name": "Offline forecast archive",
+      "command": "workflow archive",
+      "description": "Sync weather API results into local storage for repeat analysis."
+    }
+  ]
+}
