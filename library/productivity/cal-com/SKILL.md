@@ -125,14 +125,15 @@ These capabilities aren't available in any other tool for this API.
 
 ## Command Reference
 
-**api-keys** — Manage api keys
+**api-keys** — Refresh the active API key
 
-- `cal-com-pp-cli api-keys keys-refresh` — Refresh API Key
+- `cal-com-pp-cli api-keys` — Refresh API Key (promoted command; takes no args)
 
-**auth** — Manage auth
+**auth** — Manage CAL_COM_TOKEN credentials
 
-- `cal-com-pp-cli auth oauth2-get-client` — Get OAuth2 client
-- `cal-com-pp-cli auth oauth2-token` — Exchange authorization code or refresh token for tokens
+- `cal-com-pp-cli auth set-token <token>` — Save a Bearer token to the config file
+- `cal-com-pp-cli auth status` — Show the active credential source and config path
+- `cal-com-pp-cli auth logout` — Clear the stored token
 
 **bookings** — Manage bookings
 
