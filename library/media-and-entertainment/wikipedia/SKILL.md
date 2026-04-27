@@ -20,7 +20,7 @@ Do not activate this CLI for requests that require creating, updating, deleting,
 
 **feed** — Manage feed
 
-- `wikipedia-pp-cli feed` — Events on this day
+- `wikipedia-pp-cli feed get-on-this-day` — Events on this day
 
 **page** — Article content and metadata
 
@@ -55,7 +55,7 @@ Add `--agent` to any command. Expands to: `--json --compact --no-input --no-colo
 - **Filterable** — `--select` keeps a subset of fields. Dotted paths descend into nested structures; arrays traverse element-wise. Critical for keeping context small on verbose APIs:
 
   ```bash
-  wikipedia-pp-cli feed 01/01 --agent --select id,name,status
+  wikipedia-pp-cli feed 1 --month 1 --agent --select id,name,status
   ```
 - **Previewable** — `--dry-run` shows the request without sending
 - **Offline-friendly** — sync/search commands can use the local SQLite store when available
@@ -107,7 +107,7 @@ A profile is a saved set of flag values, reused across invocations. Use it when 
 
 ```
 wikipedia-pp-cli profile save briefing --json
-wikipedia-pp-cli --profile briefing feed 01/01
+wikipedia-pp-cli --profile briefing feed 1 --month 1
 wikipedia-pp-cli profile list --json
 wikipedia-pp-cli profile show briefing
 wikipedia-pp-cli profile delete briefing --yes
