@@ -29,10 +29,6 @@ Run 'api <interface>' to see that interface's methods.`,
   # Show methods for a specific interface
   dub-pp-cli api <interface-name>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if flags.dryRun {
-				fmt.Fprintln(cmd.OutOrStdout(), "api: local discovery command (no API request)")
-				return nil
-			}
 			root := cmd.Root()
 
 			if len(args) > 0 {

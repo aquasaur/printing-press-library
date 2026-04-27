@@ -157,12 +157,12 @@ type DomainSchema struct {
 }
 
 type FolderSchema struct {
+	Ttype       string `json:"Ttype"`
 	AccessLevel string `json:"accessLevel"`
 	CreatedAt   string `json:"createdAt"`
 	Description string `json:"description"`
 	Id          string `json:"id"`
 	Name        string `json:"name"`
-	Type        string `json:"type"`
 	UpdatedAt   string `json:"updatedAt"`
 }
 

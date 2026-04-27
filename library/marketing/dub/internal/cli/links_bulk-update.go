@@ -44,10 +44,18 @@ func newLinksBulkUpdateCmd(flags *rootFlags) *cobra.Command {
 			} else {
 				body = map[string]any{}
 				if bodyExternalIds != "" {
-					body["externalIds"] = bodyExternalIds
+					var parsedExternalIds any
+					if err := json.Unmarshal([]byte(bodyExternalIds), &parsedExternalIds); err != nil {
+						return fmt.Errorf("parsing --external-ids JSON: %w", err)
+					}
+					body["externalIds"] = parsedExternalIds
 				}
 				if bodyLinkIds != "" {
-					body["linkIds"] = bodyLinkIds
+					var parsedLinkIds any
+					if err := json.Unmarshal([]byte(bodyLinkIds), &parsedLinkIds); err != nil {
+						return fmt.Errorf("parsing --link-ids JSON: %w", err)
+					}
+					body["linkIds"] = parsedLinkIds
 				}
 			}
 			data, statusCode, err := c.Patch(path, body)
@@ -80,13 +88,15 @@ func newLinksBulkUpdateCmd(flags *rootFlags) *cobra.Command {
 				if flags.quiet {
 					return nil
 				}
-				// Apply --compact and --select to the API response before wrapping
+				// Apply --compact and --select to the API response before wrapping.
+				// --select wins when both are set: explicit field choice trumps the
+				// generic high-gravity allow-list. Otherwise --compact still applies
+				// when --agent is on but the user did not name fields.
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				envelope := map[string]any{
 					"action":   "patch",
@@ -115,8 +125,8 @@ func newLinksBulkUpdateCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
-	cmd.Flags().StringVar(&bodyExternalIds, "external-ids", "", "The external IDs of the links to update as stored in your database.")
-	cmd.Flags().StringVar(&bodyLinkIds, "link-ids", "", "The IDs of the links to update. Takes precedence over `externalIds`.")
+	cmd.Flags().StringVar(&bodyExternalIds, "external-ids", "[]", "The external IDs of the links to update as stored in your database.")
+	cmd.Flags().StringVar(&bodyLinkIds, "link-ids", "[]", "The IDs of the links to update. Takes precedence over `externalIds`.")
 	cmd.Flags().BoolVar(&stdinBody, "stdin", false, "Read request body as JSON from stdin")
 
 	return cmd

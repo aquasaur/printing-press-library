@@ -37,28 +37,23 @@ native streaming instead of polling.`,
   # Pipe to jq for filtering
   dub-pp-cli tail events --interval 30s | jq 'select(.type == "error")'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				resource = args[0]
-			}
-
-			if flags.dryRun {
-				r := resource
-				if r == "" {
-					r = "<resource>"
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "GET /%s (polling every %s)\n\n(dry run - no request sent)\n", r, interval)
-				return nil
-			}
-
-			if resource == "" {
-				return fmt.Errorf("resource name required (e.g., 'tail messages')")
-			}
-
 			c, err := flags.newClient()
 			if err != nil {
 				return err
 			}
 			c.NoCache = true
+
+			if len(args) > 0 {
+				resource = args[0]
+			}
+			if resource == "" {
+				// Dub's most useful poll target is /events — clicks, leads, and
+				// sales all land there in real time. Default makes `tail` work
+				// without an argument; `tail links` or `tail commissions` still
+				// work for narrower streams.
+				resource = "events"
+				fmt.Fprintln(os.Stderr, "no resource given — defaulting to 'events'. Use 'tail <resource>' for a specific stream.")
+			}
 
 			path := "/" + resource
 

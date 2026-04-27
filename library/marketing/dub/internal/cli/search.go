@@ -131,9 +131,70 @@ In local mode: searches locally synced data only.`,
 
 			var results []json.RawMessage
 			switch resourceType {
+			case "folders":
+				results, err = db.SearchFolders(query, limit)
+			case "links":
+				results, err = db.SearchLinks(query, limit)
+			case "partners":
+				results, err = db.SearchPartners(query, limit)
+			case "tags":
+				results, err = db.SearchTags(query, limit)
 			case "":
-				// Search across all synced resources via the generic FTS index.
-				results, err = db.Search(query, limit)
+				// Search all FTS-enabled tables individually to avoid duplicates.
+				seen := make(map[string]bool)
+				_ = seen // prevent unused error when no FTS tables exist
+				{
+					partial, searchErr := db.SearchFolders(query, limit)
+					if searchErr != nil {
+						return fmt.Errorf("search folders failed: %w", searchErr)
+					}
+					for _, r := range partial {
+						key := string(r)
+						if !seen[key] {
+							seen[key] = true
+							results = append(results, r)
+						}
+					}
+				}
+				{
+					partial, searchErr := db.SearchLinks(query, limit)
+					if searchErr != nil {
+						return fmt.Errorf("search links failed: %w", searchErr)
+					}
+					for _, r := range partial {
+						key := string(r)
+						if !seen[key] {
+							seen[key] = true
+							results = append(results, r)
+						}
+					}
+				}
+				{
+					partial, searchErr := db.SearchPartners(query, limit)
+					if searchErr != nil {
+						return fmt.Errorf("search partners failed: %w", searchErr)
+					}
+					for _, r := range partial {
+						key := string(r)
+						if !seen[key] {
+							seen[key] = true
+							results = append(results, r)
+						}
+					}
+				}
+				{
+					partial, searchErr := db.SearchTags(query, limit)
+					if searchErr != nil {
+						return fmt.Errorf("search tags failed: %w", searchErr)
+					}
+					for _, r := range partial {
+						key := string(r)
+						if !seen[key] {
+							seen[key] = true
+							results = append(results, r)
+						}
+					}
+				}
 			default:
 				// Unrecognized type — fall back to generic search
 				results, err = db.Search(query, limit)

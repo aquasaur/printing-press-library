@@ -57,6 +57,58 @@ func newAnalyticsRetrieveCmd(flags *rootFlags) *cobra.Command {
 		Short:   "Retrieve analytics for a link, a domain, or the authenticated workspace.",
 		Example: "  dub-pp-cli analytics retrieve",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("event") {
+				allowedEvent := []string{"clicks", "leads", "sales", "composite"}
+				validEvent := false
+				for _, v := range allowedEvent {
+					if flagEvent == v {
+						validEvent = true
+						break
+					}
+				}
+				if !validEvent {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "event", flagEvent, allowedEvent)
+				}
+			}
+			if cmd.Flags().Changed("group-by") {
+				allowedGroupBy := []string{"count", "timeseries", "continents", "regions", "countries", "cities", "devices", "browsers", "os", "trigger", "triggers", "referers", "referer_urls", "top_folders", "top_link_tags", "top_domains", "top_links", "top_urls", "top_base_urls", "top_partners", "top_groups", "utm_sources", "utm_mediums", "utm_campaigns", "utm_terms", "utm_contents"}
+				validGroupBy := false
+				for _, v := range allowedGroupBy {
+					if flagGroupBy == v {
+						validGroupBy = true
+						break
+					}
+				}
+				if !validGroupBy {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "group-by", flagGroupBy, allowedGroupBy)
+				}
+			}
+			if cmd.Flags().Changed("interval") {
+				allowedInterval := []string{"24h", "7d", "30d", "90d", "1y", "mtd", "qtd", "ytd", "all"}
+				validInterval := false
+				for _, v := range allowedInterval {
+					if flagInterval == v {
+						validInterval = true
+						break
+					}
+				}
+				if !validInterval {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "interval", flagInterval, allowedInterval)
+				}
+			}
+			if cmd.Flags().Changed("sale-type") {
+				allowedSaleType := []string{"new", "recurring"}
+				validSaleType := false
+				for _, v := range allowedSaleType {
+					if flagSaleType == v {
+						validSaleType = true
+						break
+					}
+				}
+				if !validSaleType {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sale-type", flagSaleType, allowedSaleType)
+				}
+			}
 			c, err := flags.newClient()
 			if err != nil {
 				return err
@@ -188,14 +240,15 @@ func newAnalyticsRetrieveCmd(flags *rootFlags) *cobra.Command {
 				_ = json.Unmarshal(data, &countItems)
 				printProvenance(cmd, len(countItems), prov)
 			}
-			// For JSON output, wrap with provenance envelope before passing through flags
+			// For JSON output, wrap with provenance envelope before passing through flags.
+			// --select wins over --compact when both are set; --compact only runs when
+			// no explicit fields were requested.
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
 				if wrapErr != nil {
@@ -219,8 +272,8 @@ func newAnalyticsRetrieveCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
-	cmd.Flags().StringVar(&flagEvent, "event", "clicks", "The type of event to retrieve analytics for. Defaults to `clicks`.")
-	cmd.Flags().StringVar(&flagGroupBy, "group-by", "count", "The parameter to group the analytics data points by. Defaults to `count` if undefined.")
+	cmd.Flags().StringVar(&flagEvent, "event", "clicks", "The type of event to retrieve analytics for. Defaults to `clicks`. (one of: clicks, leads, sales, composite)")
+	cmd.Flags().StringVar(&flagGroupBy, "group-by", "count", "The parameter to group the analytics data points by. Defaults to `count` if undefined. (one of: count, timeseries, continents, regions, countries, cities, devices, browsers, os, trigger, triggers, referers, referer_urls, top_folders, top_link_tags, top_domains, top_links, top_urls, top_base_urls, top_partners, top_groups, utm_sources, utm_mediums, utm_campaigns, utm_terms, utm_contents)")
 	cmd.Flags().StringVar(&flagDomain, "domain", "", "The domain to filter analytics for. Supports advanced filtering: single value, multiple values (comma-separated), or...")
 	cmd.Flags().StringVar(&flagKey, "key", "", "The slug of the short link to retrieve analytics for. Must be used along with the corresponding `domain` of the...")
 	cmd.Flags().StringVar(&flagLinkId, "link-id", "", "The unique ID of the link to retrieve analytics for.Supports advanced filtering: single value, multiple values...")
@@ -231,7 +284,7 @@ func newAnalyticsRetrieveCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&flagGroupId, "group-id", "", "The group ID to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().StringVar(&flagPartnerId, "partner-id", "", "The ID of the partner to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().StringVar(&flagCustomerId, "customer-id", "", "The ID of the customer to retrieve analytics for.")
-	cmd.Flags().StringVar(&flagInterval, "interval", "", "The interval to retrieve analytics for. If undefined, defaults to 24h.")
+	cmd.Flags().StringVar(&flagInterval, "interval", "", "The interval to retrieve analytics for. If undefined, defaults to 24h. (one of: 24h, 7d, 30d, 90d, 1y, mtd, qtd, ytd, all)")
 	cmd.Flags().StringVar(&flagStart, "start", "", "The start date and time when to retrieve analytics from. If set, takes precedence over `interval`.")
 	cmd.Flags().StringVar(&flagEnd, "end", "", "The end date and time when to retrieve analytics from. If not provided, defaults to the current date. If set along...")
 	cmd.Flags().StringVar(&flagTimezone, "timezone", "UTC", "The IANA time zone code for aligning timeseries granularity (e.g. America/New_York). Defaults to UTC.")
@@ -252,7 +305,7 @@ func newAnalyticsRetrieveCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&flagUtmTerm, "utm-term", "", "The UTM term to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().StringVar(&flagUtmContent, "utm-content", "", "The UTM content to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().BoolVar(&flagRoot, "root", false, "Filter for root domains. If true, filter for domains only. If false, filter for links only. If undefined, return both.")
-	cmd.Flags().StringVar(&flagSaleType, "sale-type", "", "Filter sales by type: 'new' for first-time purchases, 'recurring' for repeat purchases. If undefined, returns both.")
+	cmd.Flags().StringVar(&flagSaleType, "sale-type", "", "Filter sales by type: 'new' for first-time purchases, 'recurring' for repeat purchases. If undefined, returns both. (one of: new, recurring)")
 	cmd.Flags().StringVar(&flagQuery, "query", "", "Search the events by a custom metadata value. Only available for lead and sale events. Examples:...")
 	cmd.Flags().StringVar(&flagProgramId, "program-id", "", "Deprecated: This is automatically inferred from your workspace's defaultProgramId. The ID of the program to retrieve...")
 	cmd.Flags().StringVar(&flagTagIds, "tag-ids", "", "Deprecated: Use `tagId` instead. The tag IDs to retrieve analytics for.")

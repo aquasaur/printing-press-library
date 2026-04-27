@@ -104,13 +104,15 @@ func newCommissionsUpdateCmd(flags *rootFlags) *cobra.Command {
 				if flags.quiet {
 					return nil
 				}
-				// Apply --compact and --select to the API response before wrapping
+				// Apply --compact and --select to the API response before wrapping.
+				// --select wins when both are set: explicit field choice trumps the
+				// generic high-gravity allow-list. Otherwise --compact still applies
+				// when --agent is on but the user did not name fields.
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				envelope := map[string]any{
 					"action":   "patch",
@@ -141,7 +143,7 @@ func newCommissionsUpdateCmd(flags *rootFlags) *cobra.Command {
 	}
 	cmd.Flags().Float64Var(&bodyAmount, "amount", 0.0, "Deprecated. Use `saleAmount` instead.")
 	cmd.Flags().StringVar(&bodyCurrency, "currency", "usd", "The currency of the sale amount to update. Accepts ISO 4217 currency codes.")
-	cmd.Flags().Float64Var(&bodyEarnings, "earnings", 0.0, "The new absolute earnings for the custom commission. Paid commissions cannot be updated.")
+	cmd.Flags().Float64Var(&bodyEarnings, "earnings", 0.0, "The new earnings amount for the commission. Paid commissions cannot be updated. If provided, will override the...")
 	cmd.Flags().Float64Var(&bodyModifyAmount, "modify-amount", 0.0, "Deprecated. Use `modifySaleAmount` instead.")
 	cmd.Flags().Float64Var(&bodyModifySaleAmount, "modify-sale-amount", 0.0, "Modify the current sale amount: use positive values to increase the amount, negative values to decrease it. Takes...")
 	cmd.Flags().Float64Var(&bodySaleAmount, "sale-amount", 0.0, "The new absolute amount for the sale. Paid commissions cannot be updated.")

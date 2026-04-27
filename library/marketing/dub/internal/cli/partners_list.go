@@ -29,6 +29,45 @@ func newPartnersListCmd(flags *rootFlags) *cobra.Command {
 		Short:   "List all partners",
 		Example: "  dub-pp-cli partners list",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("status") {
+				allowedStatus := []string{"pending", "approved", "rejected", "invited", "declined", "deactivated", "banned", "archived"}
+				validStatus := false
+				for _, v := range allowedStatus {
+					if flagStatus == v {
+						validStatus = true
+						break
+					}
+				}
+				if !validStatus {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "status", flagStatus, allowedStatus)
+				}
+			}
+			if cmd.Flags().Changed("sort-by") {
+				allowedSortBy := []string{"createdAt", "totalClicks", "totalLeads", "totalConversions", "totalSaleAmount", "totalCommissions", "netRevenue", "earningsPerClick", "averageLifetimeValue", "clickToLeadRate", "clickToConversionRate", "leadToConversionRate", "returnOnAdSpend"}
+				validSortBy := false
+				for _, v := range allowedSortBy {
+					if flagSortBy == v {
+						validSortBy = true
+						break
+					}
+				}
+				if !validSortBy {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-by", flagSortBy, allowedSortBy)
+				}
+			}
+			if cmd.Flags().Changed("sort-order") {
+				allowedSortOrder := []string{"asc", "desc"}
+				validSortOrder := false
+				for _, v := range allowedSortOrder {
+					if flagSortOrder == v {
+						validSortOrder = true
+						break
+					}
+				}
+				if !validSortOrder {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-order", flagSortOrder, allowedSortOrder)
+				}
+			}
 			c, err := flags.newClient()
 			if err != nil {
 				return err
@@ -56,14 +95,15 @@ func newPartnersListCmd(flags *rootFlags) *cobra.Command {
 				_ = json.Unmarshal(data, &countItems)
 				printProvenance(cmd, len(countItems), prov)
 			}
-			// For JSON output, wrap with provenance envelope before passing through flags
+			// For JSON output, wrap with provenance envelope before passing through flags.
+			// --select wins over --compact when both are set; --compact only runs when
+			// no explicit fields were requested.
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
 				if wrapErr != nil {
@@ -88,10 +128,10 @@ func newPartnersListCmd(flags *rootFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&flagGroupId, "group-id", "", "A filter on the list based on the partner's `groupId` field.")
-	cmd.Flags().StringVar(&flagStatus, "status", "", "A filter on the list based on the partner's `status` field.")
+	cmd.Flags().StringVar(&flagStatus, "status", "", "A filter on the list based on the partner's `status` field. (one of: pending, approved, rejected, invited, declined, deactivated, banned, archived)")
 	cmd.Flags().StringVar(&flagCountry, "country", "", "A filter on the list based on the partner's `country` field.")
-	cmd.Flags().StringVar(&flagSortBy, "sort-by", "totalSaleAmount", "The field to sort the partners by. The default is `totalSaleAmount`.")
-	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "desc", "The sort order. The default is `desc`.")
+	cmd.Flags().StringVar(&flagSortBy, "sort-by", "totalSaleAmount", "The field to sort the partners by. The default is `totalSaleAmount`. (one of: createdAt, totalClicks, totalLeads, totalConversions, totalSaleAmount, totalCommissions, netRevenue, earningsPerClick, averageLifetimeValue, clickToLeadRate, clickToConversionRate, leadToConversionRate, returnOnAdSpend)")
+	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "desc", "The sort order. The default is `desc`. (one of: asc, desc)")
 	cmd.Flags().StringVar(&flagEmail, "email", "", "Filter the partner list based on the partner's `email`. The value must be a string. Takes precedence over `search`.")
 	cmd.Flags().StringVar(&flagTenantId, "tenant-id", "", "Filter the partner list based on the partner's `tenantId`. The value must be a string. Takes precedence over `email`...")
 	cmd.Flags().StringVar(&flagSearch, "search", "", "A search query to filter partners by ID, name, email, or link.")

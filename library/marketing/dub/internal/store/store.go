@@ -26,6 +26,14 @@ func IsUUID(s string) bool {
 	return uuidPattern.MatchString(s)
 }
 
+// StoreSchemaVersion is the on-disk schema version this binary understands.
+// It is stamped into SQLite's PRAGMA user_version on fresh databases and
+// checked on every open. Bump this whenever a migration changes table
+// shape — adding columns, dropping indexes, changing FTS5 tokenizers —
+// so an older binary refuses to open a newer database rather than silently
+// producing wrong results against a schema it cannot read.
+const StoreSchemaVersion = 1
+
 type Store struct {
 	db   *sql.DB
 	path string
@@ -41,7 +49,10 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
-	db.SetMaxOpenConns(1)
+	// WAL mode + 2 connections allows one read cursor open while a second
+	// query executes (e.g., analytics commands calling helpers during row
+	// iteration). Writes are still serialized by SQLite's WAL lock.
+	db.SetMaxOpenConns(2)
 
 	s := &Store{db: db, path: dbPath}
 	if err := s.migrate(); err != nil {
@@ -56,7 +67,397 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// Path returns the on-disk path of the backing SQLite file.
+func (s *Store) Path() string {
+	return s.path
+}
+
+// DB exposes the underlying *sql.DB for callers that need to run ad-hoc
+// queries (e.g., doctor's cache inspection, share snapshot import).
+// Callers must not call Close on the returned handle.
+func (s *Store) DB() *sql.DB {
+	return s.db
+}
+
+// SchemaVersion reads PRAGMA user_version, which is stamped by migrate().
+// A zero value means the database predates the schema-version gate — not
+// a bug, but the caller may want to warn.
+func (s *Store) SchemaVersion() (int, error) {
+	var v int
+	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return 0, fmt.Errorf("read user_version: %w", err)
+	}
+	return v, nil
+}
+
+// setSchemaVersion stamps PRAGMA user_version. The value is not parameterizable
+// in SQLite's PRAGMA syntax, so it is formatted into the statement; migrate()
+// only calls this with the compile-time StoreSchemaVersion constant, so there
+// is no untrusted input.
+func (s *Store) setSchemaVersion(version int) error {
+	stmt := fmt.Sprintf(`PRAGMA user_version = %d`, version)
+	if _, err := s.db.Exec(stmt); err != nil {
+		return fmt.Errorf("stamp user_version: %w", err)
+	}
+	return nil
+}
+
+// ensureColumn adds a column to an existing table if it isn't already
+// present. It is the upgrade-path safety valve for schema additions:
+// CREATE TABLE IF NOT EXISTS is a no-op when the table already exists, so
+// columns added by newer binaries (e.g. parent_id from the dependent-
+// resources work) never land on databases created by older binaries —
+// which then trip "no such column" when a follow-on CREATE INDEX runs.
+//
+// Skips silently if the table doesn't yet exist (fresh install — the
+// CREATE TABLE migration will create it with the column already declared)
+// or if the column already exists.
+func (s *Store) ensureColumn(table, column, decl string) error {
+	var name string
+	err := s.db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table,
+	).Scan(&name)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("checking table %s: %w", table, err)
+	}
+
+	rows, err := s.db.Query(fmt.Sprintf(`PRAGMA table_info("%s")`, table))
+	if err != nil {
+		return fmt.Errorf("table_info %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var n, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &n, &typ, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan table_info %s: %w", table, err)
+		}
+		if n == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating table_info %s: %w", table, err)
+	}
+
+	if _, err := s.db.Exec(fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN "%s" %s`, table, column, decl)); err != nil {
+		// A concurrent Open() may have added the column between our
+		// PRAGMA check and this ALTER. SQLite returns SQLITE_ERROR with
+		// "duplicate column name", which busy_timeout does not retry.
+		// The DB is now in the desired state regardless of who won.
+		if strings.Contains(err.Error(), "duplicate column name") {
+			return nil
+		}
+		return fmt.Errorf("add column %s.%s: %w", table, column, err)
+	}
+	return nil
+}
+
+// backfillColumns adds columns that newer binaries declare but that
+// pre-existing databases (created before those columns were added) lack.
+// Must run before the migrations slice so that subsequent CREATE INDEX
+// statements referencing the column can succeed against the upgraded
+// table. Idempotent: safe to call on fresh DBs (table-not-found short-
+// circuit) and on already-current DBs (column-exists short-circuit).
+//
+// Table names are emitted bare (no safeName) — ensureColumn double-quotes
+// them at SQL emit time and uses parameter binding for the sqlite_master
+// lookup, so the values flow as Go string literals first and SQL
+// identifiers second. Wrapping with safeName here would embed literal
+// double-quote characters into the Go string and break compilation for
+// any spec whose dependent-resource snake_cased name is a SQL reserved
+// word.
+func (s *Store) backfillColumns() error {
+	for _, c := range []struct{ table, column, decl string }{
+		{table: "customers", column: "include_expanded_fields", decl: "INTEGER"},
+		{table: "customers", column: "email", decl: "TEXT"},
+		{table: "customers", column: "external_id", decl: "TEXT"},
+		{table: "customers", column: "search", decl: "TEXT"},
+		{table: "customers", column: "country", decl: "TEXT"},
+		{table: "customers", column: "link_id", decl: "TEXT"},
+		{table: "customers", column: "program_id", decl: "TEXT"},
+		{table: "customers", column: "partner_id", decl: "TEXT"},
+		{table: "customers", column: "sort_by", decl: "TEXT"},
+		{table: "customers", column: "sort_order", decl: "TEXT"},
+		{table: "customers", column: "ending_before", decl: "TEXT"},
+		{table: "customers", column: "starting_after", decl: "TEXT"},
+		{table: "customers", column: "page", decl: "REAL"},
+		{table: "customers", column: "page_size", decl: "REAL"},
+		{table: "customers", column: "avatar", decl: "TEXT"},
+		{table: "customers", column: "name", decl: "TEXT"},
+		{table: "customers", column: "stripe_customer_id", decl: "TEXT"},
+		{table: "domains", column: "domains", decl: "TEXT"},
+		{table: "domains", column: "archived", decl: "INTEGER"},
+		{table: "domains", column: "search", decl: "TEXT"},
+		{table: "domains", column: "page", decl: "REAL"},
+		{table: "domains", column: "page_size", decl: "REAL"},
+		{table: "domains", column: "apple_app_site_association", decl: "TEXT"},
+		{table: "domains", column: "asset_links", decl: "TEXT"},
+		{table: "domains", column: "expired_url", decl: "TEXT"},
+		{table: "domains", column: "logo", decl: "TEXT"},
+		{table: "domains", column: "not_found_url", decl: "TEXT"},
+		{table: "domains", column: "placeholder", decl: "TEXT"},
+		{table: "domains", column: "slug", decl: "TEXT"},
+		{table: "domains", column: "domain", decl: "TEXT"},
+		{table: "events", column: "event", decl: "TEXT"},
+		{table: "events", column: "domain", decl: "TEXT"},
+		{table: "events", column: "key", decl: "TEXT"},
+		{table: "events", column: "link_id", decl: "TEXT"},
+		{table: "events", column: "external_id", decl: "TEXT"},
+		{table: "events", column: "tenant_id", decl: "TEXT"},
+		{table: "events", column: "tag_id", decl: "TEXT"},
+		{table: "events", column: "folder_id", decl: "TEXT"},
+		{table: "events", column: "group_id", decl: "TEXT"},
+		{table: "events", column: "partner_id", decl: "TEXT"},
+		{table: "events", column: "customer_id", decl: "TEXT"},
+		{table: "events", column: "interval", decl: "TEXT"},
+		{table: "events", column: "start", decl: "TEXT"},
+		{table: "events", column: "end", decl: "TEXT"},
+		{table: "events", column: "timezone", decl: "TEXT"},
+		{table: "events", column: "country", decl: "TEXT"},
+		{table: "events", column: "city", decl: "TEXT"},
+		{table: "events", column: "region", decl: "TEXT"},
+		{table: "events", column: "continent", decl: "TEXT"},
+		{table: "events", column: "device", decl: "TEXT"},
+		{table: "events", column: "browser", decl: "TEXT"},
+		{table: "events", column: "os", decl: "TEXT"},
+		{table: "events", column: "trigger", decl: "TEXT"},
+		{table: "events", column: "referer", decl: "TEXT"},
+		{table: "events", column: "referer_url", decl: "TEXT"},
+		{table: "events", column: "url", decl: "TEXT"},
+		{table: "events", column: "utm_source", decl: "TEXT"},
+		{table: "events", column: "utm_medium", decl: "TEXT"},
+		{table: "events", column: "utm_campaign", decl: "TEXT"},
+		{table: "events", column: "utm_term", decl: "TEXT"},
+		{table: "events", column: "utm_content", decl: "TEXT"},
+		{table: "events", column: "root", decl: "INTEGER"},
+		{table: "events", column: "sale_type", decl: "TEXT"},
+		{table: "events", column: "query", decl: "TEXT"},
+		{table: "events", column: "program_id", decl: "TEXT"},
+		{table: "events", column: "tag_ids", decl: "TEXT"},
+		{table: "events", column: "qr", decl: "INTEGER"},
+		{table: "events", column: "page", decl: "REAL"},
+		{table: "events", column: "limit", decl: "REAL"},
+		{table: "events", column: "sort_order", decl: "TEXT"},
+		{table: "events", column: "sort_by", decl: "TEXT"},
+		{table: "events", column: "order", decl: "TEXT"},
+		{table: "qr", column: "url", decl: "TEXT"},
+		{table: "qr", column: "logo", decl: "TEXT"},
+		{table: "qr", column: "size", decl: "REAL"},
+		{table: "qr", column: "level", decl: "TEXT"},
+		{table: "qr", column: "fg_color", decl: "TEXT"},
+		{table: "qr", column: "bg_color", decl: "TEXT"},
+		{table: "qr", column: "hide_logo", decl: "INTEGER"},
+		{table: "qr", column: "margin", decl: "REAL"},
+		{table: "qr", column: "include_margin", decl: "INTEGER"},
+		{table: "submissions", column: "bounties_id", decl: "TEXT"},
+		{table: "analytics", column: "event", decl: "TEXT"},
+		{table: "analytics", column: "group_by", decl: "TEXT"},
+		{table: "analytics", column: "domain", decl: "TEXT"},
+		{table: "analytics", column: "key", decl: "TEXT"},
+		{table: "analytics", column: "link_id", decl: "TEXT"},
+		{table: "analytics", column: "external_id", decl: "TEXT"},
+		{table: "analytics", column: "tenant_id", decl: "TEXT"},
+		{table: "analytics", column: "tag_id", decl: "TEXT"},
+		{table: "analytics", column: "folder_id", decl: "TEXT"},
+		{table: "analytics", column: "group_id", decl: "TEXT"},
+		{table: "analytics", column: "partner_id", decl: "TEXT"},
+		{table: "analytics", column: "customer_id", decl: "TEXT"},
+		{table: "analytics", column: "interval", decl: "TEXT"},
+		{table: "analytics", column: "start", decl: "TEXT"},
+		{table: "analytics", column: "end", decl: "TEXT"},
+		{table: "analytics", column: "timezone", decl: "TEXT"},
+		{table: "analytics", column: "country", decl: "TEXT"},
+		{table: "analytics", column: "city", decl: "TEXT"},
+		{table: "analytics", column: "region", decl: "TEXT"},
+		{table: "analytics", column: "continent", decl: "TEXT"},
+		{table: "analytics", column: "device", decl: "TEXT"},
+		{table: "analytics", column: "browser", decl: "TEXT"},
+		{table: "analytics", column: "os", decl: "TEXT"},
+		{table: "analytics", column: "trigger", decl: "TEXT"},
+		{table: "analytics", column: "referer", decl: "TEXT"},
+		{table: "analytics", column: "referer_url", decl: "TEXT"},
+		{table: "analytics", column: "url", decl: "TEXT"},
+		{table: "analytics", column: "utm_source", decl: "TEXT"},
+		{table: "analytics", column: "utm_medium", decl: "TEXT"},
+		{table: "analytics", column: "utm_campaign", decl: "TEXT"},
+		{table: "analytics", column: "utm_term", decl: "TEXT"},
+		{table: "analytics", column: "utm_content", decl: "TEXT"},
+		{table: "analytics", column: "root", decl: "INTEGER"},
+		{table: "analytics", column: "sale_type", decl: "TEXT"},
+		{table: "analytics", column: "query", decl: "TEXT"},
+		{table: "analytics", column: "program_id", decl: "TEXT"},
+		{table: "analytics", column: "tag_ids", decl: "TEXT"},
+		{table: "analytics", column: "qr", decl: "INTEGER"},
+		{table: "folders", column: "search", decl: "TEXT"},
+		{table: "folders", column: "page", decl: "REAL"},
+		{table: "folders", column: "page_size", decl: "REAL"},
+		{table: "folders", column: "access_level", decl: "TEXT"},
+		{table: "folders", column: "description", decl: "TEXT"},
+		{table: "folders", column: "name", decl: "TEXT"},
+		{table: "links", column: "domain", decl: "TEXT"},
+		{table: "links", column: "tag_id", decl: "TEXT"},
+		{table: "links", column: "tag_ids", decl: "TEXT"},
+		{table: "links", column: "tag_names", decl: "TEXT"},
+		{table: "links", column: "folder_id", decl: "TEXT"},
+		{table: "links", column: "search", decl: "TEXT"},
+		{table: "links", column: "user_id", decl: "TEXT"},
+		{table: "links", column: "tenant_id", decl: "TEXT"},
+		{table: "links", column: "show_archived", decl: "INTEGER"},
+		{table: "links", column: "with_tags", decl: "INTEGER"},
+		{table: "links", column: "sort_by", decl: "TEXT"},
+		{table: "links", column: "sort_order", decl: "TEXT"},
+		{table: "links", column: "sort", decl: "TEXT"},
+		{table: "links", column: "ending_before", decl: "TEXT"},
+		{table: "links", column: "starting_after", decl: "TEXT"},
+		{table: "links", column: "page", decl: "REAL"},
+		{table: "links", column: "page_size", decl: "REAL"},
+		{table: "links", column: "group_by", decl: "TEXT"},
+		{table: "links", column: "key", decl: "TEXT"},
+		{table: "links", column: "link_id", decl: "TEXT"},
+		{table: "links", column: "external_id", decl: "TEXT"},
+		{table: "links", column: "android", decl: "TEXT"},
+		{table: "links", column: "archived", decl: "INTEGER"},
+		{table: "links", column: "comments", decl: "TEXT"},
+		{table: "links", column: "description", decl: "TEXT"},
+		{table: "links", column: "do_index", decl: "INTEGER"},
+		{table: "links", column: "expired_url", decl: "TEXT"},
+		{table: "links", column: "expires_at", decl: "TEXT"},
+		{table: "links", column: "image", decl: "TEXT"},
+		{table: "links", column: "ios", decl: "TEXT"},
+		{table: "links", column: "key_length", decl: "REAL"},
+		{table: "links", column: "partner_id", decl: "TEXT"},
+		{table: "links", column: "password", decl: "TEXT"},
+		{table: "links", column: "prefix", decl: "TEXT"},
+		{table: "links", column: "program_id", decl: "TEXT"},
+		{table: "links", column: "proxy", decl: "INTEGER"},
+		{table: "links", column: "public_stats", decl: "INTEGER"},
+		{table: "links", column: "ref", decl: "TEXT"},
+		{table: "links", column: "rewrite", decl: "INTEGER"},
+		{table: "links", column: "test_completed_at", decl: "TEXT"},
+		{table: "links", column: "test_started_at", decl: "TEXT"},
+		{table: "links", column: "title", decl: "TEXT"},
+		{table: "links", column: "track_conversion", decl: "INTEGER"},
+		{table: "links", column: "url", decl: "TEXT"},
+		{table: "links", column: "utm_campaign", decl: "TEXT"},
+		{table: "links", column: "utm_content", decl: "TEXT"},
+		{table: "links", column: "utm_medium", decl: "TEXT"},
+		{table: "links", column: "utm_source", decl: "TEXT"},
+		{table: "links", column: "utm_term", decl: "TEXT"},
+		{table: "links", column: "video", decl: "TEXT"},
+		{table: "partners", column: "country", decl: "TEXT"},
+		{table: "partners", column: "group_id", decl: "TEXT"},
+		{table: "partners", column: "page", decl: "REAL"},
+		{table: "partners", column: "page_size", decl: "REAL"},
+		{table: "partners", column: "partner_id", decl: "TEXT"},
+		{table: "partners", column: "tenant_id", decl: "TEXT"},
+		{table: "partners", column: "status", decl: "TEXT"},
+		{table: "partners", column: "sort_by", decl: "TEXT"},
+		{table: "partners", column: "sort_order", decl: "TEXT"},
+		{table: "partners", column: "email", decl: "TEXT"},
+		{table: "partners", column: "search", decl: "TEXT"},
+		{table: "partners", column: "interval", decl: "TEXT"},
+		{table: "partners", column: "start", decl: "TEXT"},
+		{table: "partners", column: "end", decl: "TEXT"},
+		{table: "partners", column: "timezone", decl: "TEXT"},
+		{table: "partners", column: "query", decl: "TEXT"},
+		{table: "partners", column: "group_by", decl: "TEXT"},
+		{table: "partners", column: "description", decl: "TEXT"},
+		{table: "partners", column: "image", decl: "TEXT"},
+		{table: "partners", column: "name", decl: "TEXT"},
+		{table: "partners", column: "username", decl: "TEXT"},
+		{table: "partners", column: "reason", decl: "TEXT"},
+		{table: "partners", column: "allow_immediate_reapply", decl: "INTEGER"},
+		{table: "partners", column: "rejection_note", decl: "TEXT"},
+		{table: "partners", column: "rejection_reason", decl: "TEXT"},
+		{table: "partners", column: "comments", decl: "TEXT"},
+		{table: "partners", column: "key", decl: "TEXT"},
+		{table: "partners", column: "url", decl: "TEXT"},
+		{table: "payouts", column: "status", decl: "TEXT"},
+		{table: "payouts", column: "partner_id", decl: "TEXT"},
+		{table: "payouts", column: "tenant_id", decl: "TEXT"},
+		{table: "payouts", column: "invoice_id", decl: "TEXT"},
+		{table: "payouts", column: "sort_by", decl: "TEXT"},
+		{table: "payouts", column: "sort_order", decl: "TEXT"},
+		{table: "payouts", column: "page", decl: "REAL"},
+		{table: "payouts", column: "page_size", decl: "REAL"},
+		{table: "tags", column: "sort_by", decl: "TEXT"},
+		{table: "tags", column: "sort_order", decl: "TEXT"},
+		{table: "tags", column: "search", decl: "TEXT"},
+		{table: "tags", column: "ids", decl: "TEXT"},
+		{table: "tags", column: "page", decl: "REAL"},
+		{table: "tags", column: "page_size", decl: "REAL"},
+		{table: "tags", column: "color", decl: "TEXT"},
+		{table: "tags", column: "name", decl: "TEXT"},
+		{table: "tags", column: "tag", decl: "TEXT"},
+		{table: "track", column: "deep_link", decl: "TEXT"},
+		{table: "track", column: "dub_domain", decl: "TEXT"},
+		{table: "track", column: "amount", decl: "INTEGER"},
+		{table: "track", column: "click_id", decl: "TEXT"},
+		{table: "track", column: "currency", decl: "TEXT"},
+		{table: "track", column: "customer_avatar", decl: "TEXT"},
+		{table: "track", column: "customer_email", decl: "TEXT"},
+		{table: "track", column: "customer_external_id", decl: "TEXT"},
+		{table: "track", column: "customer_name", decl: "TEXT"},
+		{table: "track", column: "event_name", decl: "TEXT"},
+		{table: "track", column: "invoice_id", decl: "TEXT"},
+		{table: "track", column: "lead_event_name", decl: "TEXT"},
+		{table: "track", column: "payment_processor", decl: "TEXT"},
+		{table: "track", column: "event_quantity", decl: "REAL"},
+		{table: "track", column: "mode", decl: "TEXT"},
+		{table: "commissions", column: "type", decl: "TEXT"},
+		{table: "commissions", column: "customer_id", decl: "TEXT"},
+		{table: "commissions", column: "payout_id", decl: "TEXT"},
+		{table: "commissions", column: "partner_id", decl: "TEXT"},
+		{table: "commissions", column: "tenant_id", decl: "TEXT"},
+		{table: "commissions", column: "group_id", decl: "TEXT"},
+		{table: "commissions", column: "invoice_id", decl: "TEXT"},
+		{table: "commissions", column: "status", decl: "TEXT"},
+		{table: "commissions", column: "sort_by", decl: "TEXT"},
+		{table: "commissions", column: "sort_order", decl: "TEXT"},
+		{table: "commissions", column: "interval", decl: "TEXT"},
+		{table: "commissions", column: "start", decl: "TEXT"},
+		{table: "commissions", column: "end", decl: "TEXT"},
+		{table: "commissions", column: "timezone", decl: "TEXT"},
+		{table: "commissions", column: "ending_before", decl: "TEXT"},
+		{table: "commissions", column: "starting_after", decl: "TEXT"},
+		{table: "commissions", column: "page", decl: "REAL"},
+		{table: "commissions", column: "page_size", decl: "REAL"},
+		{table: "commissions", column: "amount", decl: "REAL"},
+		{table: "commissions", column: "currency", decl: "TEXT"},
+		{table: "commissions", column: "earnings", decl: "REAL"},
+		{table: "commissions", column: "modify_amount", decl: "REAL"},
+		{table: "commissions", column: "modify_sale_amount", decl: "REAL"},
+		{table: "commissions", column: "sale_amount", decl: "REAL"},
+		{table: "sync_state", column: "last_cursor", decl: "TEXT"},
+		{table: "sync_state", column: "last_synced_at", decl: "DATETIME"},
+		{table: "sync_state", column: "total_count", decl: "INTEGER DEFAULT 0"},
+	} {
+		if err := s.ensureColumn(c.table, c.column, c.decl); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) migrate() error {
+	current, err := s.SchemaVersion()
+	if err != nil {
+		return fmt.Errorf("reading schema version: %w", err)
+	}
+	if current > StoreSchemaVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d; upgrade the CLI binary or open an older database", current, StoreSchemaVersion)
+	}
+
+	if err := s.backfillColumns(); err != nil {
+		return fmt.Errorf("backfilling columns: %w", err)
+	}
+
 	migrations := []string{
 		`CREATE TABLE IF NOT EXISTS resources (
 			id TEXT PRIMARY KEY,
@@ -76,25 +477,106 @@ func (s *Store) migrate() error {
 		`CREATE VIRTUAL TABLE IF NOT EXISTS resources_fts USING fts5(
 			id, resource_type, content, tokenize='porter unicode61'
 		)`,
-		`CREATE TABLE IF NOT EXISTS tags (
+		`CREATE TABLE IF NOT EXISTS customers (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			include_expanded_fields INTEGER,
+			email TEXT,
+			external_id TEXT,
+			search TEXT,
+			country TEXT,
+			link_id TEXT,
+			program_id TEXT,
+			partner_id TEXT,
+			sort_by TEXT,
+			sort_order TEXT,
+			ending_before TEXT,
+			starting_after TEXT,
+			page REAL,
+			page_size REAL,
+			avatar TEXT,
+			name TEXT,
+			stripe_customer_id TEXT
 		)`,
-		`CREATE TABLE IF NOT EXISTS tokens (
+		`CREATE TABLE IF NOT EXISTS domains (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			domains TEXT,
+			archived INTEGER,
+			search TEXT,
+			page REAL,
+			page_size REAL,
+			apple_app_site_association TEXT,
+			asset_links TEXT,
+			expired_url TEXT,
+			logo TEXT,
+			not_found_url TEXT,
+			placeholder TEXT,
+			slug TEXT,
+			domain TEXT
 		)`,
-		`CREATE TABLE IF NOT EXISTS track (
+		`CREATE TABLE IF NOT EXISTS events (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			event TEXT,
+			domain TEXT,
+			"key" TEXT,
+			link_id TEXT,
+			external_id TEXT,
+			tenant_id TEXT,
+			tag_id TEXT,
+			folder_id TEXT,
+			group_id TEXT,
+			partner_id TEXT,
+			customer_id TEXT,
+			interval TEXT,
+			start TEXT,
+			"end" TEXT,
+			timezone TEXT,
+			country TEXT,
+			city TEXT,
+			region TEXT,
+			continent TEXT,
+			device TEXT,
+			browser TEXT,
+			os TEXT,
+			"trigger" TEXT,
+			referer TEXT,
+			referer_url TEXT,
+			url TEXT,
+			utm_source TEXT,
+			utm_medium TEXT,
+			utm_campaign TEXT,
+			utm_term TEXT,
+			utm_content TEXT,
+			root INTEGER,
+			sale_type TEXT,
+			query TEXT,
+			program_id TEXT,
+			tag_ids TEXT,
+			qr INTEGER,
+			page REAL,
+			"limit" REAL,
+			sort_order TEXT,
+			sort_by TEXT,
+			"order" TEXT
 		)`,
-		`CREATE TABLE IF NOT EXISTS analytics (
+		`CREATE TABLE IF NOT EXISTS qr (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			url TEXT,
+			logo TEXT,
+			size REAL,
+			level TEXT,
+			fg_color TEXT,
+			bg_color TEXT,
+			hide_logo INTEGER,
+			margin REAL,
+			include_margin INTEGER
 		)`,
 		`CREATE TABLE IF NOT EXISTS bounties (
 			id TEXT PRIMARY KEY,
@@ -108,68 +590,308 @@ func (s *Store) migrate() error {
 			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_submissions_bounties_id ON submissions(bounties_id)`,
-		`CREATE TABLE IF NOT EXISTS customers (
+		`CREATE TABLE IF NOT EXISTS tokens (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
 			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
-		`CREATE TABLE IF NOT EXISTS domains (
+		`CREATE TABLE IF NOT EXISTS analytics (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS events (
-			id TEXT PRIMARY KEY,
-			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			event TEXT,
+			group_by TEXT,
+			domain TEXT,
+			"key" TEXT,
+			link_id TEXT,
+			external_id TEXT,
+			tenant_id TEXT,
+			tag_id TEXT,
+			folder_id TEXT,
+			group_id TEXT,
+			partner_id TEXT,
+			customer_id TEXT,
+			interval TEXT,
+			start TEXT,
+			"end" TEXT,
+			timezone TEXT,
+			country TEXT,
+			city TEXT,
+			region TEXT,
+			continent TEXT,
+			device TEXT,
+			browser TEXT,
+			os TEXT,
+			"trigger" TEXT,
+			referer TEXT,
+			referer_url TEXT,
+			url TEXT,
+			utm_source TEXT,
+			utm_medium TEXT,
+			utm_campaign TEXT,
+			utm_term TEXT,
+			utm_content TEXT,
+			root INTEGER,
+			sale_type TEXT,
+			query TEXT,
+			program_id TEXT,
+			tag_ids TEXT,
+			qr INTEGER
 		)`,
 		`CREATE TABLE IF NOT EXISTS folders (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			search TEXT,
+			page REAL,
+			page_size REAL,
+			access_level TEXT,
+			description TEXT,
+			name TEXT
 		)`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS folders_fts USING fts5(
-			id,
 			description,
 			name,
-			tokenize='porter unicode61'
+			content='folders',
+			content_rowid='rowid'
 		)`,
+		`CREATE TRIGGER IF NOT EXISTS folders_ai AFTER INSERT ON folders BEGIN
+			INSERT INTO folders_fts(rowid, description, name)
+			VALUES (new.rowid,new.description, new.name);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS folders_ad AFTER DELETE ON folders BEGIN
+			INSERT INTO folders_fts(folders_fts, rowid, description, name)
+			VALUES ('delete', old.rowid,old.description, old.name);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS folders_au AFTER UPDATE ON folders BEGIN
+			INSERT INTO folders_fts(folders_fts, rowid, description, name)
+			VALUES ('delete', old.rowid,old.description, old.name);
+			INSERT INTO folders_fts(rowid, description, name)
+			VALUES (new.rowid,new.description, new.name);
+		END`,
+		`CREATE TABLE IF NOT EXISTS links (
+			id TEXT PRIMARY KEY,
+			data JSON NOT NULL,
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			domain TEXT,
+			tag_id TEXT,
+			tag_ids TEXT,
+			tag_names TEXT,
+			folder_id TEXT,
+			search TEXT,
+			user_id TEXT,
+			tenant_id TEXT,
+			show_archived INTEGER,
+			with_tags INTEGER,
+			sort_by TEXT,
+			sort_order TEXT,
+			sort TEXT,
+			ending_before TEXT,
+			starting_after TEXT,
+			page REAL,
+			page_size REAL,
+			group_by TEXT,
+			"key" TEXT,
+			link_id TEXT,
+			external_id TEXT,
+			android TEXT,
+			archived INTEGER,
+			comments TEXT,
+			description TEXT,
+			do_index INTEGER,
+			expired_url TEXT,
+			expires_at TEXT,
+			image TEXT,
+			ios TEXT,
+			key_length REAL,
+			partner_id TEXT,
+			password TEXT,
+			prefix TEXT,
+			program_id TEXT,
+			proxy INTEGER,
+			public_stats INTEGER,
+			ref TEXT,
+			rewrite INTEGER,
+			test_completed_at TEXT,
+			test_started_at TEXT,
+			title TEXT,
+			track_conversion INTEGER,
+			url TEXT,
+			utm_campaign TEXT,
+			utm_content TEXT,
+			utm_medium TEXT,
+			utm_source TEXT,
+			utm_term TEXT,
+			video TEXT
+		)`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(
+			description,
+			title,
+			content='links',
+			content_rowid='rowid'
+		)`,
+		`CREATE TRIGGER IF NOT EXISTS links_ai AFTER INSERT ON links BEGIN
+			INSERT INTO links_fts(rowid, description, title)
+			VALUES (new.rowid,new.description, new.title);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS links_ad AFTER DELETE ON links BEGIN
+			INSERT INTO links_fts(links_fts, rowid, description, title)
+			VALUES ('delete', old.rowid,old.description, old.title);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS links_au AFTER UPDATE ON links BEGIN
+			INSERT INTO links_fts(links_fts, rowid, description, title)
+			VALUES ('delete', old.rowid,old.description, old.title);
+			INSERT INTO links_fts(rowid, description, title)
+			VALUES (new.rowid,new.description, new.title);
+		END`,
 		`CREATE TABLE IF NOT EXISTS partners (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			country TEXT,
+			group_id TEXT,
+			page REAL,
+			page_size REAL,
+			partner_id TEXT,
+			tenant_id TEXT,
+			status TEXT,
+			sort_by TEXT,
+			sort_order TEXT,
+			email TEXT,
+			search TEXT,
+			interval TEXT,
+			start TEXT,
+			"end" TEXT,
+			timezone TEXT,
+			query TEXT,
+			group_by TEXT,
+			description TEXT,
+			image TEXT,
+			name TEXT,
+			username TEXT,
+			reason TEXT,
+			allow_immediate_reapply INTEGER,
+			rejection_note TEXT,
+			rejection_reason TEXT,
+			comments TEXT,
+			"key" TEXT,
+			url TEXT
 		)`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS partners_fts USING fts5(
-			id,
 			description,
 			name,
-			tokenize='porter unicode61'
+			content='partners',
+			content_rowid='rowid'
 		)`,
+		`CREATE TRIGGER IF NOT EXISTS partners_ai AFTER INSERT ON partners BEGIN
+			INSERT INTO partners_fts(rowid, description, name)
+			VALUES (new.rowid,new.description, new.name);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS partners_ad AFTER DELETE ON partners BEGIN
+			INSERT INTO partners_fts(partners_fts, rowid, description, name)
+			VALUES ('delete', old.rowid,old.description, old.name);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS partners_au AFTER UPDATE ON partners BEGIN
+			INSERT INTO partners_fts(partners_fts, rowid, description, name)
+			VALUES ('delete', old.rowid,old.description, old.name);
+			INSERT INTO partners_fts(rowid, description, name)
+			VALUES (new.rowid,new.description, new.name);
+		END`,
 		`CREATE TABLE IF NOT EXISTS payouts (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			status TEXT,
+			partner_id TEXT,
+			tenant_id TEXT,
+			invoice_id TEXT,
+			sort_by TEXT,
+			sort_order TEXT,
+			page REAL,
+			page_size REAL
+		)`,
+		`CREATE TABLE IF NOT EXISTS tags (
+			id TEXT PRIMARY KEY,
+			data JSON NOT NULL,
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			sort_by TEXT,
+			sort_order TEXT,
+			search TEXT,
+			ids TEXT,
+			page REAL,
+			page_size REAL,
+			color TEXT,
+			name TEXT,
+			tag TEXT
+		)`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING fts5(
+			name,
+			tag,
+			content='tags',
+			content_rowid='rowid'
+		)`,
+		`CREATE TRIGGER IF NOT EXISTS tags_ai AFTER INSERT ON tags BEGIN
+			INSERT INTO tags_fts(rowid, name, tag)
+			VALUES (new.rowid,new.name, new.tag);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS tags_ad AFTER DELETE ON tags BEGIN
+			INSERT INTO tags_fts(tags_fts, rowid, name, tag)
+			VALUES ('delete', old.rowid,old.name, old.tag);
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS tags_au AFTER UPDATE ON tags BEGIN
+			INSERT INTO tags_fts(tags_fts, rowid, name, tag)
+			VALUES ('delete', old.rowid,old.name, old.tag);
+			INSERT INTO tags_fts(rowid, name, tag)
+			VALUES (new.rowid,new.name, new.tag);
+		END`,
+		`CREATE TABLE IF NOT EXISTS track (
+			id TEXT PRIMARY KEY,
+			data JSON NOT NULL,
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			deep_link TEXT,
+			dub_domain TEXT,
+			amount INTEGER,
+			click_id TEXT,
+			currency TEXT,
+			customer_avatar TEXT,
+			customer_email TEXT,
+			customer_external_id TEXT,
+			customer_name TEXT,
+			event_name TEXT,
+			invoice_id TEXT,
+			lead_event_name TEXT,
+			payment_processor TEXT,
+			event_quantity REAL,
+			mode TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS commissions (
 			id TEXT PRIMARY KEY,
 			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS links (
-			id TEXT PRIMARY KEY,
-			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(
-			id,
-			description,
-			title,
-			tokenize='porter unicode61'
-		)`,
-		`CREATE TABLE IF NOT EXISTS qr (
-			id TEXT PRIMARY KEY,
-			data JSON NOT NULL,
-			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			type TEXT,
+			customer_id TEXT,
+			payout_id TEXT,
+			partner_id TEXT,
+			tenant_id TEXT,
+			group_id TEXT,
+			invoice_id TEXT,
+			status TEXT,
+			sort_by TEXT,
+			sort_order TEXT,
+			interval TEXT,
+			start TEXT,
+			"end" TEXT,
+			timezone TEXT,
+			ending_before TEXT,
+			starting_after TEXT,
+			page REAL,
+			page_size REAL,
+			amount REAL,
+			currency TEXT,
+			earnings REAL,
+			modify_amount REAL,
+			modify_sale_amount REAL,
+			sale_amount REAL
 		)`,
 	}
 
@@ -177,6 +899,14 @@ func (s *Store) migrate() error {
 		if _, err := s.db.Exec(m); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
+	}
+	// Stamp the schema version after successful migration. On a fresh DB
+	// this writes 1; on an already-stamped DB this is a no-op write of the
+	// same value. An older DB with user_version = 0 and pre-existing tables
+	// gets stamped here without any data rewrites because the migrations
+	// above are idempotent via CREATE TABLE IF NOT EXISTS.
+	if err := s.setSchemaVersion(StoreSchemaVersion); err != nil {
+		return err
 	}
 	return nil
 }
@@ -192,17 +922,18 @@ func (s *Store) upsertGenericResourceTx(tx *sql.Tx, resourceType, id string, dat
 		return err
 	}
 
-	_, err = tx.Exec(`DELETE FROM resources_fts WHERE id = ?`, id)
-	if err != nil {
+	ftsRowid := ftsRowID(id)
+	// Use explicit rowid for FTS5 compatibility with modernc.org/sqlite.
+	// Standard DELETE WHERE column=? may not work on FTS5 virtual tables.
+	if _, err = tx.Exec(`DELETE FROM resources_fts WHERE rowid = ?`, ftsRowid); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: FTS index cleanup failed: %v\n", err)
 	}
 
-	_, err = tx.Exec(
-		`INSERT INTO resources_fts (id, resource_type, content)
-		 VALUES (?, ?, ?)`,
-		id, resourceType, string(data),
-	)
-	if err != nil {
+	if _, err = tx.Exec(
+		`INSERT INTO resources_fts (rowid, id, resource_type, content)
+		 VALUES (?, ?, ?, ?)`,
+		ftsRowid, id, resourceType, string(data),
+	); err != nil {
 		// FTS insert failure is non-fatal
 		fmt.Fprintf(os.Stderr, "warning: FTS index update failed: %v\n", err)
 	}
@@ -263,17 +994,6 @@ func (s *Store) List(resourceType string, limit int) ([]json.RawMessage, error) 
 	return results, rows.Err()
 }
 
-// ftsQuote wraps each token in double quotes so FTS5 treats hyphens and
-// other punctuation as literals instead of operators.
-func ftsQuote(query string) string {
-	tokens := strings.Fields(query)
-	for i, t := range tokens {
-		t = strings.ReplaceAll(t, `"`, `""`)
-		tokens[i] = `"` + t + `"`
-	}
-	return strings.Join(tokens, " ")
-}
-
 func (s *Store) Search(query string, limit int) ([]json.RawMessage, error) {
 	if limit <= 0 {
 		limit = 50
@@ -311,6 +1031,17 @@ func extractObjectID(obj map[string]any) string {
 	return ""
 }
 
+// ftsRowID derives a deterministic rowid from a string ID for use with FTS5.
+// modernc.org/sqlite's FTS5 implementation may not support DELETE WHERE column=?
+// on virtual tables, so we use explicit rowids and DELETE WHERE rowid=? instead.
+func ftsRowID(id string) int64 {
+	var h uint64
+	for _, c := range id {
+		h = h*31 + uint64(c)
+	}
+	return int64(h & 0x7FFFFFFFFFFFFFFF) // ensure positive
+}
+
 func lookupFieldValue(obj map[string]any, snakeKey string) any {
 	if v, ok := obj[snakeKey]; ok {
 		return v
@@ -325,6 +1056,300 @@ func lookupFieldValue(obj map[string]any, snakeKey string) any {
 	if v, ok := obj[strings.Join(parts, "")]; ok {
 		return v
 	}
+	return nil
+}
+
+// upsertCustomersTx writes the typed-table portion of a customers upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertCustomersTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO customers (id, data, synced_at, include_expanded_fields, email, external_id, search, country, link_id, program_id, partner_id, sort_by, sort_order, ending_before, starting_after, page, page_size, avatar, name, stripe_customer_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, include_expanded_fields = excluded.include_expanded_fields, email = excluded.email, external_id = excluded.external_id, search = excluded.search, country = excluded.country, link_id = excluded.link_id, program_id = excluded.program_id, partner_id = excluded.partner_id, sort_by = excluded.sort_by, sort_order = excluded.sort_order, ending_before = excluded.ending_before, starting_after = excluded.starting_after, page = excluded.page, page_size = excluded.page_size, avatar = excluded.avatar, name = excluded.name, stripe_customer_id = excluded.stripe_customer_id`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "include_expanded_fields"),
+		lookupFieldValue(obj, "email"),
+		lookupFieldValue(obj, "external_id"),
+		lookupFieldValue(obj, "search"),
+		lookupFieldValue(obj, "country"),
+		lookupFieldValue(obj, "link_id"),
+		lookupFieldValue(obj, "program_id"),
+		lookupFieldValue(obj, "partner_id"),
+		lookupFieldValue(obj, "sort_by"),
+		lookupFieldValue(obj, "sort_order"),
+		lookupFieldValue(obj, "ending_before"),
+		lookupFieldValue(obj, "starting_after"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+		lookupFieldValue(obj, "avatar"),
+		lookupFieldValue(obj, "name"),
+		lookupFieldValue(obj, "stripe_customer_id"),
+	); err != nil {
+		return fmt.Errorf("insert into customers: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertCustomers inserts or updates a customers record with domain-specific columns.
+func (s *Store) UpsertCustomers(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling customers: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for customers")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "customers", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertCustomersTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertDomainsTx writes the typed-table portion of a domains upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertDomainsTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO domains (id, data, synced_at, domains, archived, search, page, page_size, apple_app_site_association, asset_links, expired_url, logo, not_found_url, placeholder, slug, domain)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, domains = excluded.domains, archived = excluded.archived, search = excluded.search, page = excluded.page, page_size = excluded.page_size, apple_app_site_association = excluded.apple_app_site_association, asset_links = excluded.asset_links, expired_url = excluded.expired_url, logo = excluded.logo, not_found_url = excluded.not_found_url, placeholder = excluded.placeholder, slug = excluded.slug, domain = excluded.domain`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "domains"),
+		lookupFieldValue(obj, "archived"),
+		lookupFieldValue(obj, "search"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+		lookupFieldValue(obj, "apple_app_site_association"),
+		lookupFieldValue(obj, "asset_links"),
+		lookupFieldValue(obj, "expired_url"),
+		lookupFieldValue(obj, "logo"),
+		lookupFieldValue(obj, "not_found_url"),
+		lookupFieldValue(obj, "placeholder"),
+		lookupFieldValue(obj, "slug"),
+		lookupFieldValue(obj, "domain"),
+	); err != nil {
+		return fmt.Errorf("insert into domains: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertDomains inserts or updates a domains record with domain-specific columns.
+func (s *Store) UpsertDomains(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling domains: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for domains")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "domains", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertDomainsTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertEventsTx writes the typed-table portion of a events upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertEventsTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO events (id, data, synced_at, event, domain, "key", link_id, external_id, tenant_id, tag_id, folder_id, group_id, partner_id, customer_id, interval, start, "end", timezone, country, city, region, continent, device, browser, os, "trigger", referer, referer_url, url, utm_source, utm_medium, utm_campaign, utm_term, utm_content, root, sale_type, query, program_id, tag_ids, qr, page, "limit", sort_order, sort_by, "order")
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, event = excluded.event, domain = excluded.domain, "key" = excluded."key", link_id = excluded.link_id, external_id = excluded.external_id, tenant_id = excluded.tenant_id, tag_id = excluded.tag_id, folder_id = excluded.folder_id, group_id = excluded.group_id, partner_id = excluded.partner_id, customer_id = excluded.customer_id, interval = excluded.interval, start = excluded.start, "end" = excluded."end", timezone = excluded.timezone, country = excluded.country, city = excluded.city, region = excluded.region, continent = excluded.continent, device = excluded.device, browser = excluded.browser, os = excluded.os, "trigger" = excluded."trigger", referer = excluded.referer, referer_url = excluded.referer_url, url = excluded.url, utm_source = excluded.utm_source, utm_medium = excluded.utm_medium, utm_campaign = excluded.utm_campaign, utm_term = excluded.utm_term, utm_content = excluded.utm_content, root = excluded.root, sale_type = excluded.sale_type, query = excluded.query, program_id = excluded.program_id, tag_ids = excluded.tag_ids, qr = excluded.qr, page = excluded.page, "limit" = excluded."limit", sort_order = excluded.sort_order, sort_by = excluded.sort_by, "order" = excluded."order"`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "event"),
+		lookupFieldValue(obj, "domain"),
+		lookupFieldValue(obj, "key"),
+		lookupFieldValue(obj, "link_id"),
+		lookupFieldValue(obj, "external_id"),
+		lookupFieldValue(obj, "tenant_id"),
+		lookupFieldValue(obj, "tag_id"),
+		lookupFieldValue(obj, "folder_id"),
+		lookupFieldValue(obj, "group_id"),
+		lookupFieldValue(obj, "partner_id"),
+		lookupFieldValue(obj, "customer_id"),
+		lookupFieldValue(obj, "interval"),
+		lookupFieldValue(obj, "start"),
+		lookupFieldValue(obj, "end"),
+		lookupFieldValue(obj, "timezone"),
+		lookupFieldValue(obj, "country"),
+		lookupFieldValue(obj, "city"),
+		lookupFieldValue(obj, "region"),
+		lookupFieldValue(obj, "continent"),
+		lookupFieldValue(obj, "device"),
+		lookupFieldValue(obj, "browser"),
+		lookupFieldValue(obj, "os"),
+		lookupFieldValue(obj, "trigger"),
+		lookupFieldValue(obj, "referer"),
+		lookupFieldValue(obj, "referer_url"),
+		lookupFieldValue(obj, "url"),
+		lookupFieldValue(obj, "utm_source"),
+		lookupFieldValue(obj, "utm_medium"),
+		lookupFieldValue(obj, "utm_campaign"),
+		lookupFieldValue(obj, "utm_term"),
+		lookupFieldValue(obj, "utm_content"),
+		lookupFieldValue(obj, "root"),
+		lookupFieldValue(obj, "sale_type"),
+		lookupFieldValue(obj, "query"),
+		lookupFieldValue(obj, "program_id"),
+		lookupFieldValue(obj, "tag_ids"),
+		lookupFieldValue(obj, "qr"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "limit"),
+		lookupFieldValue(obj, "sort_order"),
+		lookupFieldValue(obj, "sort_by"),
+		lookupFieldValue(obj, "order"),
+	); err != nil {
+		return fmt.Errorf("insert into events: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertEvents inserts or updates a events record with domain-specific columns.
+func (s *Store) UpsertEvents(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling events: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for events")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "events", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertEventsTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertQrTx writes the typed-table portion of a qr upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertQrTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO qr (id, data, synced_at, url, logo, size, level, fg_color, bg_color, hide_logo, margin, include_margin)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, url = excluded.url, logo = excluded.logo, size = excluded.size, level = excluded.level, fg_color = excluded.fg_color, bg_color = excluded.bg_color, hide_logo = excluded.hide_logo, margin = excluded.margin, include_margin = excluded.include_margin`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "url"),
+		lookupFieldValue(obj, "logo"),
+		lookupFieldValue(obj, "size"),
+		lookupFieldValue(obj, "level"),
+		lookupFieldValue(obj, "fg_color"),
+		lookupFieldValue(obj, "bg_color"),
+		lookupFieldValue(obj, "hide_logo"),
+		lookupFieldValue(obj, "margin"),
+		lookupFieldValue(obj, "include_margin"),
+	); err != nil {
+		return fmt.Errorf("insert into qr: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertQr inserts or updates a qr record with domain-specific columns.
+func (s *Store) UpsertQr(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling qr: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for qr")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "qr", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertQrTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertSubmissionsTx writes the typed-table portion of a submissions upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertSubmissionsTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO submissions (id, bounties_id, data, synced_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET bounties_id = excluded.bounties_id, data = excluded.data, synced_at = excluded.synced_at`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "bounties_id"),
+	); err != nil {
+		return fmt.Errorf("insert into submissions: %w", err)
+	}
+
 	return nil
 }
 
@@ -349,17 +1374,569 @@ func (s *Store) UpsertSubmissions(data json.RawMessage) error {
 	if err := s.upsertGenericResourceTx(tx, "submissions", id, data); err != nil {
 		return err
 	}
+	if err := s.upsertSubmissionsTx(tx, id, obj, data); err != nil {
+		return err
+	}
 
-	_, err = tx.Exec(
-		`INSERT INTO submissions (id, bounties_id, data, synced_at)
-		 VALUES (?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET bounties_id = excluded.bounties_id, data = excluded.data, synced_at = excluded.synced_at`,
+	return tx.Commit()
+}
+
+// upsertAnalyticsTx writes the typed-table portion of a analytics upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertAnalyticsTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO analytics (id, data, synced_at, event, group_by, domain, "key", link_id, external_id, tenant_id, tag_id, folder_id, group_id, partner_id, customer_id, interval, start, "end", timezone, country, city, region, continent, device, browser, os, "trigger", referer, referer_url, url, utm_source, utm_medium, utm_campaign, utm_term, utm_content, root, sale_type, query, program_id, tag_ids, qr)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, event = excluded.event, group_by = excluded.group_by, domain = excluded.domain, "key" = excluded."key", link_id = excluded.link_id, external_id = excluded.external_id, tenant_id = excluded.tenant_id, tag_id = excluded.tag_id, folder_id = excluded.folder_id, group_id = excluded.group_id, partner_id = excluded.partner_id, customer_id = excluded.customer_id, interval = excluded.interval, start = excluded.start, "end" = excluded."end", timezone = excluded.timezone, country = excluded.country, city = excluded.city, region = excluded.region, continent = excluded.continent, device = excluded.device, browser = excluded.browser, os = excluded.os, "trigger" = excluded."trigger", referer = excluded.referer, referer_url = excluded.referer_url, url = excluded.url, utm_source = excluded.utm_source, utm_medium = excluded.utm_medium, utm_campaign = excluded.utm_campaign, utm_term = excluded.utm_term, utm_content = excluded.utm_content, root = excluded.root, sale_type = excluded.sale_type, query = excluded.query, program_id = excluded.program_id, tag_ids = excluded.tag_ids, qr = excluded.qr`,
 		id,
 		string(data),
 		time.Now(),
-		lookupFieldValue(obj, "bounties_id"),
-	)
+		lookupFieldValue(obj, "event"),
+		lookupFieldValue(obj, "group_by"),
+		lookupFieldValue(obj, "domain"),
+		lookupFieldValue(obj, "key"),
+		lookupFieldValue(obj, "link_id"),
+		lookupFieldValue(obj, "external_id"),
+		lookupFieldValue(obj, "tenant_id"),
+		lookupFieldValue(obj, "tag_id"),
+		lookupFieldValue(obj, "folder_id"),
+		lookupFieldValue(obj, "group_id"),
+		lookupFieldValue(obj, "partner_id"),
+		lookupFieldValue(obj, "customer_id"),
+		lookupFieldValue(obj, "interval"),
+		lookupFieldValue(obj, "start"),
+		lookupFieldValue(obj, "end"),
+		lookupFieldValue(obj, "timezone"),
+		lookupFieldValue(obj, "country"),
+		lookupFieldValue(obj, "city"),
+		lookupFieldValue(obj, "region"),
+		lookupFieldValue(obj, "continent"),
+		lookupFieldValue(obj, "device"),
+		lookupFieldValue(obj, "browser"),
+		lookupFieldValue(obj, "os"),
+		lookupFieldValue(obj, "trigger"),
+		lookupFieldValue(obj, "referer"),
+		lookupFieldValue(obj, "referer_url"),
+		lookupFieldValue(obj, "url"),
+		lookupFieldValue(obj, "utm_source"),
+		lookupFieldValue(obj, "utm_medium"),
+		lookupFieldValue(obj, "utm_campaign"),
+		lookupFieldValue(obj, "utm_term"),
+		lookupFieldValue(obj, "utm_content"),
+		lookupFieldValue(obj, "root"),
+		lookupFieldValue(obj, "sale_type"),
+		lookupFieldValue(obj, "query"),
+		lookupFieldValue(obj, "program_id"),
+		lookupFieldValue(obj, "tag_ids"),
+		lookupFieldValue(obj, "qr"),
+	); err != nil {
+		return fmt.Errorf("insert into analytics: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertAnalytics inserts or updates a analytics record with domain-specific columns.
+func (s *Store) UpsertAnalytics(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling analytics: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for analytics")
+	}
+
+	tx, err := s.db.Begin()
 	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "analytics", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertAnalyticsTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertFoldersTx writes the typed-table portion of a folders upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertFoldersTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO folders (id, data, synced_at, search, page, page_size, access_level, description, name)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, search = excluded.search, page = excluded.page, page_size = excluded.page_size, access_level = excluded.access_level, description = excluded.description, name = excluded.name`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "search"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+		lookupFieldValue(obj, "access_level"),
+		lookupFieldValue(obj, "description"),
+		lookupFieldValue(obj, "name"),
+	); err != nil {
+		return fmt.Errorf("insert into folders: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertFolders inserts or updates a folders record with domain-specific columns.
+func (s *Store) UpsertFolders(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling folders: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for folders")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "folders", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertFoldersTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertLinksTx writes the typed-table portion of a links upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertLinksTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO links (id, data, synced_at, domain, tag_id, tag_ids, tag_names, folder_id, search, user_id, tenant_id, show_archived, with_tags, sort_by, sort_order, sort, ending_before, starting_after, page, page_size, group_by, "key", link_id, external_id, android, archived, comments, description, do_index, expired_url, expires_at, image, ios, key_length, partner_id, password, prefix, program_id, proxy, public_stats, ref, rewrite, test_completed_at, test_started_at, title, track_conversion, url, utm_campaign, utm_content, utm_medium, utm_source, utm_term, video)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, domain = excluded.domain, tag_id = excluded.tag_id, tag_ids = excluded.tag_ids, tag_names = excluded.tag_names, folder_id = excluded.folder_id, search = excluded.search, user_id = excluded.user_id, tenant_id = excluded.tenant_id, show_archived = excluded.show_archived, with_tags = excluded.with_tags, sort_by = excluded.sort_by, sort_order = excluded.sort_order, sort = excluded.sort, ending_before = excluded.ending_before, starting_after = excluded.starting_after, page = excluded.page, page_size = excluded.page_size, group_by = excluded.group_by, "key" = excluded."key", link_id = excluded.link_id, external_id = excluded.external_id, android = excluded.android, archived = excluded.archived, comments = excluded.comments, description = excluded.description, do_index = excluded.do_index, expired_url = excluded.expired_url, expires_at = excluded.expires_at, image = excluded.image, ios = excluded.ios, key_length = excluded.key_length, partner_id = excluded.partner_id, password = excluded.password, prefix = excluded.prefix, program_id = excluded.program_id, proxy = excluded.proxy, public_stats = excluded.public_stats, ref = excluded.ref, rewrite = excluded.rewrite, test_completed_at = excluded.test_completed_at, test_started_at = excluded.test_started_at, title = excluded.title, track_conversion = excluded.track_conversion, url = excluded.url, utm_campaign = excluded.utm_campaign, utm_content = excluded.utm_content, utm_medium = excluded.utm_medium, utm_source = excluded.utm_source, utm_term = excluded.utm_term, video = excluded.video`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "domain"),
+		lookupFieldValue(obj, "tag_id"),
+		lookupFieldValue(obj, "tag_ids"),
+		lookupFieldValue(obj, "tag_names"),
+		lookupFieldValue(obj, "folder_id"),
+		lookupFieldValue(obj, "search"),
+		lookupFieldValue(obj, "user_id"),
+		lookupFieldValue(obj, "tenant_id"),
+		lookupFieldValue(obj, "show_archived"),
+		lookupFieldValue(obj, "with_tags"),
+		lookupFieldValue(obj, "sort_by"),
+		lookupFieldValue(obj, "sort_order"),
+		lookupFieldValue(obj, "sort"),
+		lookupFieldValue(obj, "ending_before"),
+		lookupFieldValue(obj, "starting_after"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+		lookupFieldValue(obj, "group_by"),
+		lookupFieldValue(obj, "key"),
+		lookupFieldValue(obj, "link_id"),
+		lookupFieldValue(obj, "external_id"),
+		lookupFieldValue(obj, "android"),
+		lookupFieldValue(obj, "archived"),
+		lookupFieldValue(obj, "comments"),
+		lookupFieldValue(obj, "description"),
+		lookupFieldValue(obj, "do_index"),
+		lookupFieldValue(obj, "expired_url"),
+		lookupFieldValue(obj, "expires_at"),
+		lookupFieldValue(obj, "image"),
+		lookupFieldValue(obj, "ios"),
+		lookupFieldValue(obj, "key_length"),
+		lookupFieldValue(obj, "partner_id"),
+		lookupFieldValue(obj, "password"),
+		lookupFieldValue(obj, "prefix"),
+		lookupFieldValue(obj, "program_id"),
+		lookupFieldValue(obj, "proxy"),
+		lookupFieldValue(obj, "public_stats"),
+		lookupFieldValue(obj, "ref"),
+		lookupFieldValue(obj, "rewrite"),
+		lookupFieldValue(obj, "test_completed_at"),
+		lookupFieldValue(obj, "test_started_at"),
+		lookupFieldValue(obj, "title"),
+		lookupFieldValue(obj, "track_conversion"),
+		lookupFieldValue(obj, "url"),
+		lookupFieldValue(obj, "utm_campaign"),
+		lookupFieldValue(obj, "utm_content"),
+		lookupFieldValue(obj, "utm_medium"),
+		lookupFieldValue(obj, "utm_source"),
+		lookupFieldValue(obj, "utm_term"),
+		lookupFieldValue(obj, "video"),
+	); err != nil {
+		return fmt.Errorf("insert into links: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertLinks inserts or updates a links record with domain-specific columns.
+func (s *Store) UpsertLinks(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling links: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for links")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "links", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertLinksTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertPartnersTx writes the typed-table portion of a partners upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertPartnersTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO partners (id, data, synced_at, country, group_id, page, page_size, partner_id, tenant_id, status, sort_by, sort_order, email, search, interval, start, "end", timezone, query, group_by, description, image, name, username, reason, allow_immediate_reapply, rejection_note, rejection_reason, comments, "key", url)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, country = excluded.country, group_id = excluded.group_id, page = excluded.page, page_size = excluded.page_size, partner_id = excluded.partner_id, tenant_id = excluded.tenant_id, status = excluded.status, sort_by = excluded.sort_by, sort_order = excluded.sort_order, email = excluded.email, search = excluded.search, interval = excluded.interval, start = excluded.start, "end" = excluded."end", timezone = excluded.timezone, query = excluded.query, group_by = excluded.group_by, description = excluded.description, image = excluded.image, name = excluded.name, username = excluded.username, reason = excluded.reason, allow_immediate_reapply = excluded.allow_immediate_reapply, rejection_note = excluded.rejection_note, rejection_reason = excluded.rejection_reason, comments = excluded.comments, "key" = excluded."key", url = excluded.url`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "country"),
+		lookupFieldValue(obj, "group_id"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+		lookupFieldValue(obj, "partner_id"),
+		lookupFieldValue(obj, "tenant_id"),
+		lookupFieldValue(obj, "status"),
+		lookupFieldValue(obj, "sort_by"),
+		lookupFieldValue(obj, "sort_order"),
+		lookupFieldValue(obj, "email"),
+		lookupFieldValue(obj, "search"),
+		lookupFieldValue(obj, "interval"),
+		lookupFieldValue(obj, "start"),
+		lookupFieldValue(obj, "end"),
+		lookupFieldValue(obj, "timezone"),
+		lookupFieldValue(obj, "query"),
+		lookupFieldValue(obj, "group_by"),
+		lookupFieldValue(obj, "description"),
+		lookupFieldValue(obj, "image"),
+		lookupFieldValue(obj, "name"),
+		lookupFieldValue(obj, "username"),
+		lookupFieldValue(obj, "reason"),
+		lookupFieldValue(obj, "allow_immediate_reapply"),
+		lookupFieldValue(obj, "rejection_note"),
+		lookupFieldValue(obj, "rejection_reason"),
+		lookupFieldValue(obj, "comments"),
+		lookupFieldValue(obj, "key"),
+		lookupFieldValue(obj, "url"),
+	); err != nil {
+		return fmt.Errorf("insert into partners: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertPartners inserts or updates a partners record with domain-specific columns.
+func (s *Store) UpsertPartners(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling partners: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for partners")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "partners", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertPartnersTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertPayoutsTx writes the typed-table portion of a payouts upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertPayoutsTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO payouts (id, data, synced_at, status, partner_id, tenant_id, invoice_id, sort_by, sort_order, page, page_size)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, status = excluded.status, partner_id = excluded.partner_id, tenant_id = excluded.tenant_id, invoice_id = excluded.invoice_id, sort_by = excluded.sort_by, sort_order = excluded.sort_order, page = excluded.page, page_size = excluded.page_size`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "status"),
+		lookupFieldValue(obj, "partner_id"),
+		lookupFieldValue(obj, "tenant_id"),
+		lookupFieldValue(obj, "invoice_id"),
+		lookupFieldValue(obj, "sort_by"),
+		lookupFieldValue(obj, "sort_order"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+	); err != nil {
+		return fmt.Errorf("insert into payouts: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertPayouts inserts or updates a payouts record with domain-specific columns.
+func (s *Store) UpsertPayouts(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling payouts: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for payouts")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "payouts", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertPayoutsTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertTagsTx writes the typed-table portion of a tags upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertTagsTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO tags (id, data, synced_at, sort_by, sort_order, search, ids, page, page_size, color, name, tag)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, sort_by = excluded.sort_by, sort_order = excluded.sort_order, search = excluded.search, ids = excluded.ids, page = excluded.page, page_size = excluded.page_size, color = excluded.color, name = excluded.name, tag = excluded.tag`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "sort_by"),
+		lookupFieldValue(obj, "sort_order"),
+		lookupFieldValue(obj, "search"),
+		lookupFieldValue(obj, "ids"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+		lookupFieldValue(obj, "color"),
+		lookupFieldValue(obj, "name"),
+		lookupFieldValue(obj, "tag"),
+	); err != nil {
+		return fmt.Errorf("insert into tags: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertTags inserts or updates a tags record with domain-specific columns.
+func (s *Store) UpsertTags(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling tags: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for tags")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "tags", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertTagsTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertTrackTx writes the typed-table portion of a track upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertTrackTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO track (id, data, synced_at, deep_link, dub_domain, amount, click_id, currency, customer_avatar, customer_email, customer_external_id, customer_name, event_name, invoice_id, lead_event_name, payment_processor, event_quantity, mode)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, deep_link = excluded.deep_link, dub_domain = excluded.dub_domain, amount = excluded.amount, click_id = excluded.click_id, currency = excluded.currency, customer_avatar = excluded.customer_avatar, customer_email = excluded.customer_email, customer_external_id = excluded.customer_external_id, customer_name = excluded.customer_name, event_name = excluded.event_name, invoice_id = excluded.invoice_id, lead_event_name = excluded.lead_event_name, payment_processor = excluded.payment_processor, event_quantity = excluded.event_quantity, mode = excluded.mode`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "deep_link"),
+		lookupFieldValue(obj, "dub_domain"),
+		lookupFieldValue(obj, "amount"),
+		lookupFieldValue(obj, "click_id"),
+		lookupFieldValue(obj, "currency"),
+		lookupFieldValue(obj, "customer_avatar"),
+		lookupFieldValue(obj, "customer_email"),
+		lookupFieldValue(obj, "customer_external_id"),
+		lookupFieldValue(obj, "customer_name"),
+		lookupFieldValue(obj, "event_name"),
+		lookupFieldValue(obj, "invoice_id"),
+		lookupFieldValue(obj, "lead_event_name"),
+		lookupFieldValue(obj, "payment_processor"),
+		lookupFieldValue(obj, "event_quantity"),
+		lookupFieldValue(obj, "mode"),
+	); err != nil {
+		return fmt.Errorf("insert into track: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertTrack inserts or updates a track record with domain-specific columns.
+func (s *Store) UpsertTrack(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling track: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for track")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "track", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertTrackTx(tx, id, obj, data); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// upsertCommissionsTx writes the typed-table portion of a commissions upsert
+// inside an existing transaction. The caller is responsible for the generic
+// resources insert (via upsertGenericResourceTx) and for committing the tx.
+// Splitting this out lets UpsertBatch dispatch typed inserts per item without
+// opening a per-item transaction.
+func (s *Store) upsertCommissionsTx(tx *sql.Tx, id string, obj map[string]any, data json.RawMessage) error {
+	if _, err := tx.Exec(
+		`INSERT INTO commissions (id, data, synced_at, type, customer_id, payout_id, partner_id, tenant_id, group_id, invoice_id, status, sort_by, sort_order, interval, start, "end", timezone, ending_before, starting_after, page, page_size, amount, currency, earnings, modify_amount, modify_sale_amount, sale_amount)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET data = excluded.data, synced_at = excluded.synced_at, type = excluded.type, customer_id = excluded.customer_id, payout_id = excluded.payout_id, partner_id = excluded.partner_id, tenant_id = excluded.tenant_id, group_id = excluded.group_id, invoice_id = excluded.invoice_id, status = excluded.status, sort_by = excluded.sort_by, sort_order = excluded.sort_order, interval = excluded.interval, start = excluded.start, "end" = excluded."end", timezone = excluded.timezone, ending_before = excluded.ending_before, starting_after = excluded.starting_after, page = excluded.page, page_size = excluded.page_size, amount = excluded.amount, currency = excluded.currency, earnings = excluded.earnings, modify_amount = excluded.modify_amount, modify_sale_amount = excluded.modify_sale_amount, sale_amount = excluded.sale_amount`,
+		id,
+		string(data),
+		time.Now(),
+		lookupFieldValue(obj, "type"),
+		lookupFieldValue(obj, "customer_id"),
+		lookupFieldValue(obj, "payout_id"),
+		lookupFieldValue(obj, "partner_id"),
+		lookupFieldValue(obj, "tenant_id"),
+		lookupFieldValue(obj, "group_id"),
+		lookupFieldValue(obj, "invoice_id"),
+		lookupFieldValue(obj, "status"),
+		lookupFieldValue(obj, "sort_by"),
+		lookupFieldValue(obj, "sort_order"),
+		lookupFieldValue(obj, "interval"),
+		lookupFieldValue(obj, "start"),
+		lookupFieldValue(obj, "end"),
+		lookupFieldValue(obj, "timezone"),
+		lookupFieldValue(obj, "ending_before"),
+		lookupFieldValue(obj, "starting_after"),
+		lookupFieldValue(obj, "page"),
+		lookupFieldValue(obj, "page_size"),
+		lookupFieldValue(obj, "amount"),
+		lookupFieldValue(obj, "currency"),
+		lookupFieldValue(obj, "earnings"),
+		lookupFieldValue(obj, "modify_amount"),
+		lookupFieldValue(obj, "modify_sale_amount"),
+		lookupFieldValue(obj, "sale_amount"),
+	); err != nil {
+		return fmt.Errorf("insert into commissions: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertCommissions inserts or updates a commissions record with domain-specific columns.
+func (s *Store) UpsertCommissions(data json.RawMessage) error {
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("unmarshaling commissions: %w", err)
+	}
+
+	id := extractObjectID(obj)
+	if id == "" {
+		return fmt.Errorf("missing id for commissions")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.upsertGenericResourceTx(tx, "commissions", id, data); err != nil {
+		return err
+	}
+	if err := s.upsertCommissionsTx(tx, id, obj, data); err != nil {
 		return err
 	}
 
@@ -368,6 +1945,12 @@ func (s *Store) UpsertSubmissions(data json.RawMessage) error {
 
 // UpsertBatch inserts or replaces multiple records in a single transaction.
 // This is 10-100x faster than individual Upsert calls for bulk operations.
+//
+// For resource types that have a domain-specific typed table, the per-item
+// generic insert is followed by a dispatch to the matching upsert<Pascal>Tx
+// inside the same transaction. Without that dispatch, paginated syncs would
+// only populate the generic resources table — typed tables (and indexed
+// columns like parent_id added by dependent-resource sync) would stay empty.
 func (s *Store) UpsertBatch(resourceType string, items []json.RawMessage) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -375,31 +1958,92 @@ func (s *Store) UpsertBatch(resourceType string, items []json.RawMessage) error 
 	}
 	defer tx.Rollback()
 
+	var skippedCount int
 	for _, item := range items {
 		var obj map[string]any
 		if err := json.Unmarshal(item, &obj); err != nil {
 			continue
 		}
-		id := fmt.Sprintf("%v", lookupFieldValue(obj, "id"))
-		if id == "" || id == "<nil>" {
+		// Try common primary key field names in priority order.
+		var id string
+		for _, key := range []string{"id", "ID", "ticker", "event_ticker", "series_ticker", "key", "code", "uid", "uuid", "slug", "name"} {
+			if v := lookupFieldValue(obj, key); v != nil {
+				s := fmt.Sprintf("%v", v)
+				if s != "" && s != "<nil>" {
+					id = s
+					break
+				}
+			}
+		}
+		if id == "" {
+			skippedCount++
 			continue
 		}
 
-		_, err := tx.Exec(
-			`INSERT OR REPLACE INTO resources (id, resource_type, data, synced_at, updated_at)
-			 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-			id, resourceType, string(item),
-		)
-		if err != nil {
+		if err := s.upsertGenericResourceTx(tx, resourceType, id, item); err != nil {
 			return fmt.Errorf("upserting %s/%s: %w", resourceType, id, err)
 		}
 
-		// Update FTS index
-		tx.Exec(`DELETE FROM resources_fts WHERE id = ?`, id)
-		tx.Exec(
-			`INSERT INTO resources_fts (id, resource_type, content) VALUES (?, ?, ?)`,
-			id, resourceType, string(item),
-		)
+		switch resourceType {
+		case "customers":
+			if err := s.upsertCustomersTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "domains":
+			if err := s.upsertDomainsTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "events":
+			if err := s.upsertEventsTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "qr":
+			if err := s.upsertQrTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "submissions":
+			if err := s.upsertSubmissionsTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "analytics":
+			if err := s.upsertAnalyticsTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "folders":
+			if err := s.upsertFoldersTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "links":
+			if err := s.upsertLinksTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "partners":
+			if err := s.upsertPartnersTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "payouts":
+			if err := s.upsertPayoutsTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "tags":
+			if err := s.upsertTagsTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "track":
+			if err := s.upsertTrackTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		case "commissions":
+			if err := s.upsertCommissionsTx(tx, id, obj, item); err != nil {
+				return fmt.Errorf("typed upsert for %s/%s: %w", resourceType, id, err)
+			}
+		}
+	}
+
+	// Warn when most items in a batch lack an extractable ID — this likely
+	// means the API uses a primary key field we don't recognize yet.
+	if skippedCount > 0 && len(items) > 0 && skippedCount*2 > len(items) {
+		fmt.Fprintf(os.Stderr, "warning: %d/%d %s items skipped (no extractable ID field found)\n", skippedCount, len(items), resourceType)
 	}
 
 	return tx.Commit()
@@ -415,35 +2059,7 @@ func (s *Store) SearchFolders(query string, limit int) ([]json.RawMessage, error
 		 JOIN folders_fts ON folders_fts.rowid = t.rowid
 		 WHERE folders_fts MATCH ?
 		 ORDER BY rank LIMIT ?`,
-		ftsQuote(query), limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []json.RawMessage
-	for rows.Next() {
-		var data string
-		if err := rows.Scan(&data); err != nil {
-			return nil, err
-		}
-		results = append(results, json.RawMessage(data))
-	}
-	return results, rows.Err()
-}
-
-// SearchPartners searches the partners_fts index with optional filters.
-func (s *Store) SearchPartners(query string, limit int) ([]json.RawMessage, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	rows, err := s.db.Query(
-		`SELECT t.data FROM partners t
-		 JOIN partners_fts ON partners_fts.rowid = t.rowid
-		 WHERE partners_fts MATCH ?
-		 ORDER BY rank LIMIT ?`,
-		ftsQuote(query), limit,
+		query, limit,
 	)
 	if err != nil {
 		return nil, err
@@ -471,7 +2087,63 @@ func (s *Store) SearchLinks(query string, limit int) ([]json.RawMessage, error) 
 		 JOIN links_fts ON links_fts.rowid = t.rowid
 		 WHERE links_fts MATCH ?
 		 ORDER BY rank LIMIT ?`,
-		ftsQuote(query), limit,
+		query, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []json.RawMessage
+	for rows.Next() {
+		var data string
+		if err := rows.Scan(&data); err != nil {
+			return nil, err
+		}
+		results = append(results, json.RawMessage(data))
+	}
+	return results, rows.Err()
+}
+
+// SearchPartners searches the partners_fts index with optional filters.
+func (s *Store) SearchPartners(query string, limit int) ([]json.RawMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(
+		`SELECT t.data FROM partners t
+		 JOIN partners_fts ON partners_fts.rowid = t.rowid
+		 WHERE partners_fts MATCH ?
+		 ORDER BY rank LIMIT ?`,
+		query, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []json.RawMessage
+	for rows.Next() {
+		var data string
+		if err := rows.Scan(&data); err != nil {
+			return nil, err
+		}
+		results = append(results, json.RawMessage(data))
+	}
+	return results, rows.Err()
+}
+
+// SearchTags searches the tags_fts index with optional filters.
+func (s *Store) SearchTags(query string, limit int) ([]json.RawMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(
+		`SELECT t.data FROM tags t
+		 JOIN tags_fts ON tags_fts.rowid = t.rowid
+		 WHERE tags_fts MATCH ?
+		 ORDER BY rank LIMIT ?`,
+		query, limit,
 	)
 	if err != nil {
 		return nil, err
@@ -530,6 +2202,32 @@ func (s *Store) GetSyncCursor(resourceType string) string {
 		return cursor.String
 	}
 	return ""
+}
+
+// ListIDs returns all IDs from a resource's domain table, or from the generic
+// resources table if no domain table exists. Used by dependent sync to iterate parents.
+func (s *Store) ListIDs(resourceType string) ([]string, error) {
+	// Try domain table first (tables are named after the resource type)
+	query := fmt.Sprintf("SELECT id FROM %s", resourceType)
+	rows, err := s.db.Query(query)
+	if err != nil {
+		// Fall back to generic resources table
+		rows, err = s.db.Query("SELECT id FROM resources WHERE resource_type = ?", resourceType)
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // GetLastSyncedAt returns the last sync timestamp for a resource type.

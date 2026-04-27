@@ -55,7 +55,7 @@ and full resync. After archiving, use 'search' for instant full-text search.`,
 			}
 			defer s.Close()
 
-			resources := []string{"commissions", "customers", "domains", "events", "folders", "links", "partners", "payouts", "submissions", "tags"}
+			resources := []string{"commissions", "customers", "domains", "events", "folders", "links", "partners", "payouts", "tags"}
 			totalSynced := 0
 
 			for _, resource := range resources {

@@ -26,6 +26,32 @@ func newPartnersRetrieveAnalyticsCmd(flags *rootFlags) *cobra.Command {
 		Short:   "Retrieve analytics for a partner",
 		Example: "  dub-pp-cli partners retrieve-analytics",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("interval") {
+				allowedInterval := []string{"24h", "7d", "30d", "90d", "1y", "mtd", "qtd", "ytd", "all"}
+				validInterval := false
+				for _, v := range allowedInterval {
+					if flagInterval == v {
+						validInterval = true
+						break
+					}
+				}
+				if !validInterval {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "interval", flagInterval, allowedInterval)
+				}
+			}
+			if cmd.Flags().Changed("group-by") {
+				allowedGroupBy := []string{"top_links", "timeseries", "count"}
+				validGroupBy := false
+				for _, v := range allowedGroupBy {
+					if flagGroupBy == v {
+						validGroupBy = true
+						break
+					}
+				}
+				if !validGroupBy {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "group-by", flagGroupBy, allowedGroupBy)
+				}
+			}
 			c, err := flags.newClient()
 			if err != nil {
 				return err
@@ -67,14 +93,15 @@ func newPartnersRetrieveAnalyticsCmd(flags *rootFlags) *cobra.Command {
 				_ = json.Unmarshal(data, &countItems)
 				printProvenance(cmd, len(countItems), prov)
 			}
-			// For JSON output, wrap with provenance envelope before passing through flags
+			// For JSON output, wrap with provenance envelope before passing through flags.
+			// --select wins over --compact when both are set; --compact only runs when
+			// no explicit fields were requested.
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
 				if wrapErr != nil {
@@ -100,12 +127,12 @@ func newPartnersRetrieveAnalyticsCmd(flags *rootFlags) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&flagPartnerId, "partner-id", "", "The ID of the partner to create a link for. Will take precedence over `tenantId` if provided.")
 	cmd.Flags().StringVar(&flagTenantId, "tenant-id", "", "The ID of the partner in your system. If both `partnerId` and `tenantId` are not provided, an error will be thrown.")
-	cmd.Flags().StringVar(&flagInterval, "interval", "", "The interval to retrieve analytics for. If undefined, defaults to 24h.")
+	cmd.Flags().StringVar(&flagInterval, "interval", "", "The interval to retrieve analytics for. If undefined, defaults to 24h. (one of: 24h, 7d, 30d, 90d, 1y, mtd, qtd, ytd, all)")
 	cmd.Flags().StringVar(&flagStart, "start", "", "The start date and time when to retrieve analytics from. If set, takes precedence over `interval`.")
 	cmd.Flags().StringVar(&flagEnd, "end", "", "The end date and time when to retrieve analytics from. If not provided, defaults to the current date. If set along...")
 	cmd.Flags().StringVar(&flagTimezone, "timezone", "UTC", "The IANA time zone code for aligning timeseries granularity (e.g. America/New_York). Defaults to UTC.")
 	cmd.Flags().StringVar(&flagQuery, "query", "", "Search the events by a custom metadata value. Only available for lead and sale events. Examples:...")
-	cmd.Flags().StringVar(&flagGroupBy, "group-by", "count", "The parameter to group the analytics data points by. Defaults to `count` if undefined.")
+	cmd.Flags().StringVar(&flagGroupBy, "group-by", "count", "The parameter to group the analytics data points by. Defaults to `count` if undefined. (one of: top_links, timeseries, count)")
 
 	return cmd
 }

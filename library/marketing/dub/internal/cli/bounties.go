@@ -9,9 +9,8 @@ import (
 
 func newBountiesCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "bounties",
-		Short:  "Manage bounties",
-		Hidden: true,
+		Use:   "bounties",
+		Short: "Manage bounties",
 	}
 
 	cmd.AddCommand(newBountiesSubmissionsCmd(flags))

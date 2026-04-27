@@ -23,18 +23,50 @@ func newPayoutsPromotedCmd(flags *rootFlags) *cobra.Command {
 	var flagAll bool
 
 	cmd := &cobra.Command{
-		Use:   "payouts",
-		Short: "List all payouts",
-		Long:  "Shortcut for 'payouts list'. List all payouts",
-		Example: `  # List all payouts
-  dub-pp-cli payouts
-
-  # Filter payouts by status
-  dub-pp-cli payouts --status completed
-
-  # List payouts for a specific partner
-  dub-pp-cli payouts --partner-id ptnr_abc123 --json`,
+		Use:     "payouts",
+		Short:   "List all payouts",
+		Long:    "Shortcut for 'payouts list'. List all payouts",
+		Example: "  dub-pp-cli payouts",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("status") {
+				allowedStatus := []string{"pending", "processing", "processed", "sent", "completed", "failed", "canceled"}
+				validStatus := false
+				for _, v := range allowedStatus {
+					if flagStatus == v {
+						validStatus = true
+						break
+					}
+				}
+				if !validStatus {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "status", flagStatus, allowedStatus)
+				}
+			}
+			if cmd.Flags().Changed("sort-by") {
+				allowedSortBy := []string{"amount", "initiatedAt", "paidAt"}
+				validSortBy := false
+				for _, v := range allowedSortBy {
+					if flagSortBy == v {
+						validSortBy = true
+						break
+					}
+				}
+				if !validSortBy {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-by", flagSortBy, allowedSortBy)
+				}
+			}
+			if cmd.Flags().Changed("sort-order") {
+				allowedSortOrder := []string{"asc", "desc"}
+				validSortOrder := false
+				for _, v := range allowedSortOrder {
+					if flagSortOrder == v {
+						validSortOrder = true
+						break
+					}
+				}
+				if !validSortOrder {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-order", flagSortOrder, allowedSortOrder)
+				}
+			}
 			c, err := flags.newClient()
 			if err != nil {
 				return err
@@ -71,14 +103,15 @@ func newPayoutsPromotedCmd(flags *rootFlags) *cobra.Command {
 			if flags.csv {
 				return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 			}
-			// For JSON output, wrap with provenance envelope
+			// For JSON output, wrap with provenance envelope. --select wins over
+			// --compact when both are set; --compact only runs when no explicit
+			// fields were requested.
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
 				if wrapErr != nil {
@@ -101,12 +134,12 @@ func newPayoutsPromotedCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
-	cmd.Flags().StringVar(&flagStatus, "status", "", "Filter the list of payouts by their corresponding status.")
+	cmd.Flags().StringVar(&flagStatus, "status", "", "Filter the list of payouts by their corresponding status. (one of: pending, processing, processed, sent, completed, failed, canceled)")
 	cmd.Flags().StringVar(&flagPartnerId, "partner-id", "", "Filter the list of payouts by the associated partner. When specified, takes precedence over `tenantId`.")
 	cmd.Flags().StringVar(&flagTenantId, "tenant-id", "", "Filter the list of payouts by the associated partner's `tenantId` (their unique ID within your database).")
 	cmd.Flags().StringVar(&flagInvoiceId, "invoice-id", "", "Filter the list of payouts by invoice ID (the unique ID of the invoice you receive for each batch payout you process...")
-	cmd.Flags().StringVar(&flagSortBy, "sort-by", "amount", "The field to sort the list of payouts by.")
-	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "desc", "The sort order for the list of payouts.")
+	cmd.Flags().StringVar(&flagSortBy, "sort-by", "amount", "The field to sort the list of payouts by. (one of: amount, initiatedAt, paidAt)")
+	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "desc", "The sort order for the list of payouts. (one of: asc, desc)")
 	cmd.Flags().Float64Var(&flagPage, "page", 0.0, "The page number for pagination.")
 	cmd.Flags().Float64Var(&flagPageSize, "page-size", 100.000000, "The number of items per page.")
 	cmd.Flags().BoolVar(&flagAll, "all", false, "Fetch all pages")

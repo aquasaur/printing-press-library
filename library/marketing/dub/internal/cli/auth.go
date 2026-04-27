@@ -14,7 +14,7 @@ import (
 func newAuthCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Manage authentication tokens",
+		Short: "Manage DUB_TOKEN credentials",
 	}
 
 	cmd.AddCommand(newAuthStatusCmd(flags))

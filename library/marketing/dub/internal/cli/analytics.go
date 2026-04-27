@@ -88,8 +88,6 @@ Data must be synced first with the sync command.`,
 	cmd.Flags().StringVar(&dbPath, "db", "", "Database path")
 	cmd.Flags().IntVar(&limit, "limit", 25, "Max groups to show")
 
-	cmd.AddCommand(newAnalyticsRetrieveCmd(flags))
-
 	return cmd
 }
 

@@ -1,11 +1,90 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-04-06T16:44:16.739694Z",
-  "printing_press_version": "1.0.1-0.20260406013547-96b9b42cfd31+dirty",
+  "generated_at": "2026-04-27T07:39:11.495297Z",
+  "printing_press_version": "2.3.9",
   "api_name": "dub",
   "cli_name": "dub-pp-cli",
-  "spec_path": "/Users/tmchow/printing-press/.runstate/cli-printing-press-8bdedb85/runs/20260406-004849/research/dub-openapi.json",
+  "spec_path": "/Users/tmchow/printing-press/.runstate/robust-honking-castle-c785ea8d/runs/20260426-231211/research/dub-openapi.yaml",
   "spec_format": "openapi3",
-  "spec_checksum": "sha256:86c460e3e26e479914bbe2108a7daa87a8a259dcfc74c2a5f7fbe05528c1a3ff",
-  "run_id": "20260406-004849"
+  "spec_checksum": "sha256:fd86be0f4bd214c47fe2720a40ed0074c774b225cde931b11d49be31e56ae386",
+  "run_id": "20260426-231211",
+  "mcp_binary": "dub-pp-mcp",
+  "mcp_tool_count": 53,
+  "mcp_ready": "full",
+  "auth_type": "bearer_token",
+  "auth_env_vars": [
+    "DUB_TOKEN"
+  ],
+  "novel_features": [
+    {
+      "name": "Dead-link detection",
+      "command": "links stale",
+      "description": "Find archived, expired, or zero-traffic links across the workspace before they pile up. Joins local link metadata with analytics aggregates the API doesn't expose together."
+    },
+    {
+      "name": "Performance drift detection",
+      "command": "links drift",
+      "description": "Detect links whose click rate dropped more than threshold percent week-over-week. Catches dying campaigns before reporting deadlines."
+    },
+    {
+      "name": "Duplicate destination finder",
+      "command": "links duplicates",
+      "description": "Find every link in the workspace pointing to the same destination URL. Surfaces accidental duplicates and consolidation candidates."
+    },
+    {
+      "name": "Slug-collision lint",
+      "command": "links lint",
+      "description": "Audit short-key slugs for lookalike collisions, reserved-word violations, and brand-conflict hazards across domains."
+    },
+    {
+      "name": "Bulk URL/UTM rewrite with diff",
+      "command": "links rewrite",
+      "description": "Show every link that would change and the exact patch BEFORE sending. Mass UTM or domain migrations with dry-run safety."
+    },
+    {
+      "name": "Tag-grouped campaign dashboard",
+      "command": "campaigns",
+      "description": "Performance dashboard aggregated by tag \u2014 clicks, leads, sales rolled up across every link wearing each tag."
+    },
+    {
+      "name": "Conversion funnel attribution",
+      "command": "funnel",
+      "description": "Click-to-lead-to-sale conversion rates per link or campaign. Surfaces where prospects drop off in the funnel."
+    },
+    {
+      "name": "Customer journey timeline",
+      "command": "customers journey",
+      "description": "See every link a customer clicked, when they became a lead, and when they purchased \u2014 in one timeline."
+    },
+    {
+      "name": "Partner leaderboard",
+      "command": "partners leaderboard",
+      "description": "Rank partners by commission earned, conversion rate, and clicks generated. Find your top performers and dormant partners."
+    },
+    {
+      "name": "Commission audit reconciliation",
+      "command": "partners audit-commissions",
+      "description": "Reconcile partners, commissions, bounties, and payouts to flag stale rates, missing payouts, and expired bounties still earning."
+    },
+    {
+      "name": "Domain usage report",
+      "command": "domains report",
+      "description": "Per-domain link count and click distribution. Surfaces over- and under-used custom domains."
+    },
+    {
+      "name": "Workspace health doctor",
+      "command": "health",
+      "description": "Cross-resource Monday-morning report: rate-limit headroom, expired-but-active links, dead destination URLs, unverified domains, dormant tags."
+    },
+    {
+      "name": "Time-windowed change feed",
+      "command": "since",
+      "description": "What happened in the last N hours? Created, updated, deleted links plus partner approvals and top-clicked entities."
+    },
+    {
+      "name": "Live event tail",
+      "command": "tail",
+      "description": "Stream live changes by polling the API at regular intervals. Watch new clicks, leads, and sales as they happen."
+    }
+  ]
 }

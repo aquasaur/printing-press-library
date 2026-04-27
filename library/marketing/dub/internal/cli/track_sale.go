@@ -62,21 +62,37 @@ func newTrackSaleCmd(flags *rootFlags) *cobra.Command {
 					body["amount"] = bodyAmount
 				}
 				if bodyClickId != "" {
+					var parsedClickId any
+					if err := json.Unmarshal([]byte(bodyClickId), &parsedClickId); err != nil {
+						return fmt.Errorf("parsing --click-id JSON: %w", err)
+					}
 					body["clickId"] = bodyClickId
 				}
 				if bodyCurrency != "" {
 					body["currency"] = bodyCurrency
 				}
 				if bodyCustomerAvatar != "" {
+					var parsedCustomerAvatar any
+					if err := json.Unmarshal([]byte(bodyCustomerAvatar), &parsedCustomerAvatar); err != nil {
+						return fmt.Errorf("parsing --customer-avatar JSON: %w", err)
+					}
 					body["customerAvatar"] = bodyCustomerAvatar
 				}
 				if bodyCustomerEmail != "" {
+					var parsedCustomerEmail any
+					if err := json.Unmarshal([]byte(bodyCustomerEmail), &parsedCustomerEmail); err != nil {
+						return fmt.Errorf("parsing --customer-email JSON: %w", err)
+					}
 					body["customerEmail"] = bodyCustomerEmail
 				}
 				if bodyCustomerExternalId != "" {
 					body["customerExternalId"] = bodyCustomerExternalId
 				}
 				if bodyCustomerName != "" {
+					var parsedCustomerName any
+					if err := json.Unmarshal([]byte(bodyCustomerName), &parsedCustomerName); err != nil {
+						return fmt.Errorf("parsing --customer-name JSON: %w", err)
+					}
 					body["customerName"] = bodyCustomerName
 				}
 				if bodyEventName != "" {
@@ -122,13 +138,15 @@ func newTrackSaleCmd(flags *rootFlags) *cobra.Command {
 				if flags.quiet {
 					return nil
 				}
-				// Apply --compact and --select to the API response before wrapping
+				// Apply --compact and --select to the API response before wrapping.
+				// --select wins when both are set: explicit field choice trumps the
+				// generic high-gravity allow-list. Otherwise --compact still applies
+				// when --agent is on but the user did not name fields.
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				envelope := map[string]any{
 					"action":   "post",

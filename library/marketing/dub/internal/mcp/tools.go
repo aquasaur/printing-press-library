@@ -9,48 +9,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/mvanhorn/printing-press-library/library/marketing/dub/internal/client"
+	"github.com/mvanhorn/printing-press-library/library/marketing/dub/internal/cliutil"
 	"github.com/mvanhorn/printing-press-library/library/marketing/dub/internal/config"
 	"github.com/mvanhorn/printing-press-library/library/marketing/dub/internal/store"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
-
-// looksLikeAuthError checks if an error message body contains auth-related keywords.
-func looksLikeAuthError(msg string) bool {
-	lower := strings.ToLower(msg)
-	patterns := []string{
-		`\bkey\b`,
-		`\btoken\b`,
-		`\bunauthorized\b`,
-		`\bapi_key\b`,
-		`missing.{0,20}key`,
-		`required.{0,20}key`,
-		`\bforbidden\b`,
-		`\bauthenticat`,
-		`\bcredential`,
-	}
-	for _, p := range patterns {
-		if matched, _ := regexp.MatchString(p, lower); matched {
-			return true
-		}
-	}
-	return false
-}
-
-// sanitizeErrorBody truncates and strips credential-shaped strings from error output.
-func sanitizeErrorBody(msg string) string {
-	if len(msg) > 200 {
-		msg = msg[:200] + "..."
-	}
-	credPatterns := regexp.MustCompile(`(?i)(sk-[a-zA-Z0-9]{8,}|sk_live_[a-zA-Z0-9]+|Bearer\s+[a-zA-Z0-9._\-]+|key=[a-zA-Z0-9._\-]+)`)
-	msg = credPatterns.ReplaceAllString(msg, "[REDACTED]")
-	return msg
-}
 
 // RegisterTools registers all API operations as MCP tools.
 func RegisterTools(s *server.MCPServer) {
@@ -100,7 +68,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("bounties_submissions_approve-bounty",
-			mcplib.WithDescription("Approve a bounty submission"),
+			mcplib.WithDescription("Approve a bounty submission Returns ApproveBountyResponse."),
 			mcplib.WithString("bountyId", mcplib.Required(), mcplib.Description("The ID of the bounty")),
 			mcplib.WithString("submissionId", mcplib.Required(), mcplib.Description("The ID of the bounty submission")),
 		),
@@ -108,7 +76,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("bounties_submissions_list-bounty",
-			mcplib.WithDescription("List bounty submissions"),
+			mcplib.WithDescription("List bounty submissions Returns array of ListBountyItem."),
 			mcplib.WithString("bountyId", mcplib.Required(), mcplib.Description("The unique ID of the bounty on Dub. Can be found in the URL of the bounty page, prefixed with `bnty_`.")),
 			mcplib.WithString("status", mcplib.Description("The status of the submissions to list.")),
 			mcplib.WithString("groupId", mcplib.Description("The ID of the group to list submissions for.")),
@@ -122,7 +90,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("bounties_submissions_reject-bounty",
-			mcplib.WithDescription("Reject a bounty submission"),
+			mcplib.WithDescription("Reject a bounty submission Returns RejectBountyResponse."),
 			mcplib.WithString("bountyId", mcplib.Required(), mcplib.Description("The ID of the bounty")),
 			mcplib.WithString("submissionId", mcplib.Required(), mcplib.Description("The ID of the bounty submission")),
 		),
@@ -130,13 +98,13 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("commissions_bulk-update",
-			mcplib.WithDescription("Bulk update commissions"),
+			mcplib.WithDescription("Bulk update commissions Returns array of BulkUpdateItem."),
 		),
 		makeAPIHandler("PATCH", "/commissions/bulk", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("commissions_list",
-			mcplib.WithDescription("List all commissions"),
+			mcplib.WithDescription("List all commissions Returns array of ListItem."),
 			mcplib.WithString("type", mcplib.Description("Type")),
 			mcplib.WithString("customerId", mcplib.Description("Filter the list of commissions by the associated customer.")),
 			mcplib.WithString("payoutId", mcplib.Description("Filter the list of commissions by the associated payout.")),
@@ -160,21 +128,21 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("commissions_update",
-			mcplib.WithDescription("Update a commission"),
+			mcplib.WithDescription("Update a commission Returns UpdateResponse."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The commission's unique ID on Dub.")),
 		),
 		makeAPIHandler("PATCH", "/commissions/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("customers_delete",
-			mcplib.WithDescription("Delete a customer"),
+			mcplib.WithDescription("Delete a customer Returns DeleteResponse. Destructive."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The unique ID of the customer. You may use either the customer's `id` on Dub (obtained via `/customers` endpoint) or...")),
 		),
 		makeAPIHandler("DELETE", "/customers/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("customers_get",
-			mcplib.WithDescription("Retrieve a list of customers"),
+			mcplib.WithDescription("List all customers Returns array of GetItem."),
 			mcplib.WithString("email", mcplib.Description("A case-sensitive filter on the list based on the customer's `email` field. The value must be a string. Takes...")),
 			mcplib.WithString("externalId", mcplib.Description("A case-sensitive filter on the list based on the customer's `externalId` field. The value must be a string. Takes...")),
 			mcplib.WithString("search", mcplib.Description("A search query to filter customers by email, externalId, or name. If `email` or `externalId` is provided, this will...")),
@@ -194,7 +162,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("customers_get-id",
-			mcplib.WithDescription("Retrieve a customer"),
+			mcplib.WithDescription("Retrieve a customer Returns GetIdResponse."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The unique ID of the customer. You may use either the customer's `id` on Dub (obtained via `/customers` endpoint) or...")),
 			mcplib.WithString("includeExpandedFields", mcplib.Description("Whether to include expanded fields on the customer (`link`, `partner`, `discount`).")),
 		),
@@ -202,7 +170,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("customers_update",
-			mcplib.WithDescription("Update a customer"),
+			mcplib.WithDescription("Update a customer Returns UpdateResponse."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The unique ID of the customer. You may use either the customer's `id` on Dub (obtained via `/customers` endpoint) or...")),
 			mcplib.WithString("includeExpandedFields", mcplib.Description("Whether to include expanded fields on the customer (`link`, `partner`, `discount`).")),
 		),
@@ -210,27 +178,27 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("domains_check-status",
-			mcplib.WithDescription("Check the availability of one or more domains"),
+			mcplib.WithDescription("Check the availability of one or more domains Returns array of CheckStatusItem."),
 			mcplib.WithString("domains", mcplib.Required(), mcplib.Description("The domains to search. We only support .link domains for now.")),
 		),
 		makeAPIHandler("GET", "/domains/status", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("domains_create",
-			mcplib.WithDescription("Create a domain"),
+			mcplib.WithDescription("Create a domain Returns DomainSchema."),
 		),
 		makeAPIHandler("POST", "/domains", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("domains_delete",
-			mcplib.WithDescription("Delete a domain"),
+			mcplib.WithDescription("Delete a domain Returns DeleteResponse. Destructive."),
 			mcplib.WithString("slug", mcplib.Required(), mcplib.Description("The domain name.")),
 		),
 		makeAPIHandler("DELETE", "/domains/{slug}", []string{"slug"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("domains_list",
-			mcplib.WithDescription("Retrieve a list of domains"),
+			mcplib.WithDescription("List all domains Returns array of DomainSchema."),
 			mcplib.WithString("archived", mcplib.Description("Whether to include archived domains in the response. Defaults to `false` if not provided.")),
 			mcplib.WithString("search", mcplib.Description("The search term to filter the domains by.")),
 			mcplib.WithString("page", mcplib.Description("The page number for pagination.")),
@@ -240,20 +208,20 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("domains_register",
-			mcplib.WithDescription("Register a domain"),
+			mcplib.WithDescription("Register a domain Returns RegisterResponse."),
 		),
 		makeAPIHandler("POST", "/domains/register", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("domains_update",
-			mcplib.WithDescription("Update a domain"),
+			mcplib.WithDescription("Update a domain Returns DomainSchema."),
 			mcplib.WithString("slug", mcplib.Required(), mcplib.Description("The domain name.")),
 		),
 		makeAPIHandler("PATCH", "/domains/{slug}", []string{"slug"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("events_list",
-			mcplib.WithDescription("Retrieve a list of events"),
+			mcplib.WithDescription("List all events Returns array of ListItem."),
 			mcplib.WithString("event", mcplib.Description("The type of event to retrieve analytics for. Defaults to 'clicks'.")),
 			mcplib.WithString("domain", mcplib.Description("The domain to filter analytics for. Supports advanced filtering: single value, multiple values (comma-separated), or...")),
 			mcplib.WithString("key", mcplib.Description("The slug of the short link to retrieve analytics for. Must be used along with the corresponding `domain` of the...")),
@@ -301,20 +269,20 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("folders_create",
-			mcplib.WithDescription("Create a folder"),
+			mcplib.WithDescription("Create a folder Returns FolderSchema."),
 		),
 		makeAPIHandler("POST", "/folders", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("folders_delete",
-			mcplib.WithDescription("Delete a folder"),
+			mcplib.WithDescription("Delete a folder Returns DeleteResponse. Destructive."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The ID of the folder to delete.")),
 		),
 		makeAPIHandler("DELETE", "/folders/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("folders_list",
-			mcplib.WithDescription("Retrieve a list of folders"),
+			mcplib.WithDescription("List all folders Returns array of FolderSchema."),
 			mcplib.WithString("search", mcplib.Description("The search term to filter the folders by.")),
 			mcplib.WithString("page", mcplib.Description("The page number for pagination.")),
 			mcplib.WithString("pageSize", mcplib.Description("The number of items per page.")),
@@ -323,46 +291,46 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("folders_update",
-			mcplib.WithDescription("Update a folder"),
+			mcplib.WithDescription("Update a folder Returns FolderSchema."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The ID of the folder to update.")),
 		),
 		makeAPIHandler("PATCH", "/folders/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("links_bulk-create",
-			mcplib.WithDescription("Bulk create links"),
+			mcplib.WithDescription("Bulk create links Returns array of BulkCreateItem."),
 		),
 		makeAPIHandler("POST", "/links/bulk", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("links_bulk-delete",
-			mcplib.WithDescription("Bulk delete links"),
+			mcplib.WithDescription("Bulk delete links Returns BulkDeleteResponse. Destructive."),
 			mcplib.WithString("linkIds", mcplib.Required(), mcplib.Description("Comma-separated list of link IDs to delete. Maximum of 100 IDs. Non-existing IDs will be ignored.")),
 		),
 		makeAPIHandler("DELETE", "/links/bulk", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("links_bulk-update",
-			mcplib.WithDescription("Bulk update links"),
+			mcplib.WithDescription("Bulk update links Returns array of LinkSchema."),
 		),
 		makeAPIHandler("PATCH", "/links/bulk", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("links_create",
-			mcplib.WithDescription("Create a link"),
+			mcplib.WithDescription("Create a link Returns LinkSchema."),
 		),
 		makeAPIHandler("POST", "/links", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("links_delete",
-			mcplib.WithDescription("Delete a link"),
+			mcplib.WithDescription("Delete a link Returns DeleteResponse. Destructive."),
 			mcplib.WithString("linkId", mcplib.Required(), mcplib.Description("The id of the link to delete. You may use either `linkId` (obtained via `/links/info` endpoint) or `externalId`...")),
 		),
 		makeAPIHandler("DELETE", "/links/{linkId}", []string{"linkId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("links_get",
-			mcplib.WithDescription("Retrieve a list of links"),
+			mcplib.WithDescription("List all links Returns array of LinkSchema."),
 			mcplib.WithString("domain", mcplib.Description("The domain to filter the links by. E.g. `ac.me`. If not provided, all links for the workspace will be returned.")),
 			mcplib.WithString("tagId", mcplib.Description("Deprecated: Use `tagIds` instead. The tag ID to filter the links by.")),
 			mcplib.WithString("tagIds", mcplib.Description("The tag IDs to filter the links by.")),
@@ -402,7 +370,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("links_get-info",
-			mcplib.WithDescription("Retrieve a link"),
+			mcplib.WithDescription("Retrieve a link Returns LinkSchema."),
 			mcplib.WithString("domain", mcplib.Description("Domain")),
 			mcplib.WithString("key", mcplib.Description("Key")),
 			mcplib.WithString("linkId", mcplib.Description("The unique ID of the short link.")),
@@ -412,44 +380,50 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("links_update",
-			mcplib.WithDescription("Update a link"),
+			mcplib.WithDescription("Update a link Returns LinkSchema."),
 			mcplib.WithString("linkId", mcplib.Required(), mcplib.Description("The id of the link to update. You may use either `linkId` (obtained via `/links/info` endpoint) or `externalId`...")),
 		),
 		makeAPIHandler("PATCH", "/links/{linkId}", []string{"linkId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("links_upsert",
-			mcplib.WithDescription("Upsert a link"),
+			mcplib.WithDescription("Upsert a link Returns LinkSchema."),
 		),
 		makeAPIHandler("PUT", "/links/upsert", []string{}),
 	)
 	s.AddTool(
+		mcplib.NewTool("partners_approve",
+			mcplib.WithDescription("Approve a partner application Returns ApproveResponse."),
+		),
+		makeAPIHandler("POST", "/partners/applications/approve", []string{}),
+	)
+	s.AddTool(
 		mcplib.NewTool("partners_ban",
-			mcplib.WithDescription("Ban a partner"),
+			mcplib.WithDescription("Ban a partner Returns BanResponse."),
 		),
 		makeAPIHandler("POST", "/partners/ban", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("partners_create",
-			mcplib.WithDescription("Create or update a partner"),
+			mcplib.WithDescription("Create or update a partner Returns CreateResponse."),
 		),
 		makeAPIHandler("POST", "/partners", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("partners_create-link",
-			mcplib.WithDescription("Create a link for a partner"),
+			mcplib.WithDescription("Create a link for a partner Returns LinkSchema."),
 		),
 		makeAPIHandler("POST", "/partners/links", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("partners_deactivate",
-			mcplib.WithDescription("Deactivate a partner"),
+			mcplib.WithDescription("Deactivate a partner Returns DeactivateResponse."),
 		),
 		makeAPIHandler("POST", "/partners/deactivate", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("partners_list",
-			mcplib.WithDescription("List all partners"),
+			mcplib.WithDescription("List all partners Returns array of ListItem."),
 			mcplib.WithString("groupId", mcplib.Description("A filter on the list based on the partner's `groupId` field.")),
 			mcplib.WithString("status", mcplib.Description("A filter on the list based on the partner's `status` field.")),
 			mcplib.WithString("country", mcplib.Description("A filter on the list based on the partner's `country` field.")),
@@ -462,6 +436,22 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("pageSize", mcplib.Description("The number of items per page.")),
 		),
 		makeAPIHandler("GET", "/partners", []string{}),
+	)
+	s.AddTool(
+		mcplib.NewTool("partners_list-applications",
+			mcplib.WithDescription("List all pending partner applications Returns array of ListApplicationsItem."),
+			mcplib.WithString("country", mcplib.Description("A filter on the list based on the partner's `country` field.")),
+			mcplib.WithString("groupId", mcplib.Description("A filter on the list based on the partner's `groupId` field.")),
+			mcplib.WithString("page", mcplib.Description("The page number for pagination.")),
+			mcplib.WithString("pageSize", mcplib.Description("The number of items per page.")),
+		),
+		makeAPIHandler("GET", "/partners/applications", []string{}),
+	)
+	s.AddTool(
+		mcplib.NewTool("partners_reject",
+			mcplib.WithDescription("Reject a partner application Returns RejectResponse."),
+		),
+		makeAPIHandler("POST", "/partners/applications/reject", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("partners_retrieve-analytics",
@@ -479,7 +469,7 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("partners_retrieve-links",
-			mcplib.WithDescription("Retrieve a partner's links."),
+			mcplib.WithDescription("Retrieve a partner's links. Returns array of RetrieveLinksItem."),
 			mcplib.WithString("partnerId", mcplib.Description("The ID of the partner to create a link for. Will take precedence over `tenantId` if provided.")),
 			mcplib.WithString("tenantId", mcplib.Description("The ID of the partner in your system. If both `partnerId` and `tenantId` are not provided, an error will be thrown.")),
 		),
@@ -487,13 +477,13 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("partners_upsert-link",
-			mcplib.WithDescription("Upsert a link for a partner"),
+			mcplib.WithDescription("Upsert a link for a partner Returns LinkSchema."),
 		),
 		makeAPIHandler("PUT", "/partners/links/upsert", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("payouts_list",
-			mcplib.WithDescription("List all payouts"),
+			mcplib.WithDescription("List all payouts Returns array of ListItem."),
 			mcplib.WithString("status", mcplib.Description("Filter the list of payouts by their corresponding status.")),
 			mcplib.WithString("partnerId", mcplib.Description("Filter the list of payouts by the associated partner. When specified, takes precedence over `tenantId`.")),
 			mcplib.WithString("tenantId", mcplib.Description("Filter the list of payouts by the associated partner's `tenantId` (their unique ID within your database).")),
@@ -522,20 +512,20 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("tags_create",
-			mcplib.WithDescription("Create a tag"),
+			mcplib.WithDescription("Create a tag Returns LinkTagSchemaOutput."),
 		),
 		makeAPIHandler("POST", "/tags", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("tags_delete",
-			mcplib.WithDescription("Delete a tag"),
+			mcplib.WithDescription("Delete a tag Returns DeleteResponse. Destructive."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The ID of the tag to delete.")),
 		),
 		makeAPIHandler("DELETE", "/tags/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("tags_get",
-			mcplib.WithDescription("Retrieve a list of tags"),
+			mcplib.WithDescription("List all tags Returns array of LinkTagSchemaOutput."),
 			mcplib.WithString("sortBy", mcplib.Description("The field to sort the tags by.")),
 			mcplib.WithString("sortOrder", mcplib.Description("The order to sort the tags by.")),
 			mcplib.WithString("search", mcplib.Description("The search term to filter the tags by.")),
@@ -547,61 +537,70 @@ func RegisterTools(s *server.MCPServer) {
 	)
 	s.AddTool(
 		mcplib.NewTool("tags_update",
-			mcplib.WithDescription("Update a tag"),
+			mcplib.WithDescription("Update a tag Returns LinkTagSchemaOutput."),
 			mcplib.WithString("id", mcplib.Required(), mcplib.Description("The ID of the tag to update.")),
 		),
 		makeAPIHandler("PATCH", "/tags/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("tokens_create-referrals-embed",
-			mcplib.WithDescription("Create a referrals embed token"),
+			mcplib.WithDescription("Create a referrals embed token Returns CreateReferralsEmbedResponse."),
 		),
 		makeAPIHandler("POST", "/tokens/embed/referrals", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("track_lead",
-			mcplib.WithDescription("Track a lead"),
+			mcplib.WithDescription("Track a lead Returns LeadResponse."),
 		),
 		makeAPIHandler("POST", "/track/lead", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("track_open",
-			mcplib.WithDescription("Track a deep link open event"),
+			mcplib.WithDescription("Track a deep link open event Returns OpenResponse."),
 		),
 		makeAPIHandler("POST", "/track/open", []string{}),
 	)
 	s.AddTool(
 		mcplib.NewTool("track_sale",
-			mcplib.WithDescription("Track a sale"),
+			mcplib.WithDescription("Track a sale Returns SaleResponse."),
 		),
 		makeAPIHandler("POST", "/track/sale", []string{}),
 	)
-	// Sync tool
+	// Sync tool — populates local database for offline search and sql queries
 	s.AddTool(
 		mcplib.NewTool("sync",
-			mcplib.WithDescription("Sync API data to local SQLite for offline search and analysis"),
-			mcplib.WithString("resources", mcplib.Description("Comma-separated resource types to sync")),
-			mcplib.WithString("since", mcplib.Description("Incremental sync since duration (7d, 24h, 1w)")),
+			mcplib.WithDescription("Sync API data to local SQLite database. Run this before using search or sql tools. Supports incremental sync."),
+			mcplib.WithString("resources", mcplib.Description("Comma-separated resource types to sync (omit for all)")),
+			mcplib.WithString("since", mcplib.Description("Incremental sync since duration (e.g. 7d, 24h, 1w)")),
 			mcplib.WithBoolean("full", mcplib.Description("Full resync ignoring checkpoints")),
 		),
 		handleSync,
 	)
-	// Search tool
+	// Search tool — faster than iterating list endpoints for finding specific items
 	s.AddTool(
 		mcplib.NewTool("search",
-			mcplib.WithDescription("Full-text search across synced data"),
-			mcplib.WithString("query", mcplib.Required(), mcplib.Description("Search query")),
+			mcplib.WithDescription("Full-text search across all synced data. Faster than paginating list endpoints. Requires sync first."),
+			mcplib.WithString("query", mcplib.Required(), mcplib.Description("Search query (supports FTS5 syntax: AND, OR, NOT, quotes for phrases)")),
 			mcplib.WithNumber("limit", mcplib.Description("Max results (default 25)")),
 		),
 		handleSearch,
 	)
-	// SQL tool
+	// SQL tool — ad-hoc analysis on synced data without API calls
 	s.AddTool(
 		mcplib.NewTool("sql",
-			mcplib.WithDescription("Run read-only SQL query against local database"),
-			mcplib.WithString("query", mcplib.Required(), mcplib.Description("SQL query (SELECT only)")),
+			mcplib.WithDescription("Run read-only SQL against local database. Use for ad-hoc analysis, aggregations, and joins across synced resources. Requires sync first."),
+			mcplib.WithString("query", mcplib.Required(), mcplib.Description("SQL query (SELECT only). Tables match resource names.")),
 		),
 		handleSQL,
+	)
+
+	// Context tool — front-loaded domain knowledge for agents.
+	// Call this first to understand the API taxonomy, query patterns, and capabilities.
+	s.AddTool(
+		mcplib.NewTool("context",
+			mcplib.WithDescription("Get API domain context: resource taxonomy, auth requirements, query tips, and unique capabilities. Call this first."),
+		),
+		handleContext,
 	)
 }
 
@@ -613,17 +612,22 @@ func makeAPIHandler(method, pathTemplate string, positionalParams []string) serv
 			return mcplib.NewToolResultError(err.Error()), nil
 		}
 
+		// mcp-go v0.47+ made CallToolParams.Arguments an `any` to support
+		// non-map payloads; GetArguments() returns the map[string]any shape
+		// we rely on here (or an empty map when the payload is something else).
+		args := req.GetArguments()
+
 		// Build path by substituting positional params
 		path := pathTemplate
 		for _, p := range positionalParams {
-			if v, ok := req.Params.Arguments[p]; ok {
+			if v, ok := args[p]; ok {
 				path = strings.Replace(path, "{"+p+"}", fmt.Sprintf("%v", v), 1)
 			}
 		}
 
 		// Collect non-positional params as query params
 		params := make(map[string]string)
-		for k, v := range req.Params.Arguments {
+		for k, v := range args {
 			isPositional := false
 			for _, p := range positionalParams {
 				if k == p {
@@ -641,13 +645,13 @@ func makeAPIHandler(method, pathTemplate string, positionalParams []string) serv
 		case "GET":
 			data, err = c.Get(path, params)
 		case "POST":
-			body, _ := json.Marshal(req.Params.Arguments)
+			body, _ := json.Marshal(args)
 			data, _, err = c.Post(path, body)
 		case "PUT":
-			body, _ := json.Marshal(req.Params.Arguments)
+			body, _ := json.Marshal(args)
 			data, _, err = c.Put(path, body)
 		case "PATCH":
-			body, _ := json.Marshal(req.Params.Arguments)
+			body, _ := json.Marshal(args)
 			data, _, err = c.Patch(path, body)
 		case "DELETE":
 			data, _, err = c.Delete(path)
@@ -660,18 +664,18 @@ func makeAPIHandler(method, pathTemplate string, positionalParams []string) serv
 			switch {
 			case strings.Contains(msg, "HTTP 409"):
 				return mcplib.NewToolResultText("already exists (no-op)"), nil
-			case strings.Contains(msg, "HTTP 400") && looksLikeAuthError(msg):
-				return mcplib.NewToolResultError("authentication error: " + sanitizeErrorBody(msg) +
+			case strings.Contains(msg, "HTTP 400") && cliutil.LooksLikeAuthError(msg):
+				return mcplib.NewToolResultError("authentication error: " + cliutil.SanitizeErrorBody(msg) +
 					"\nhint: the API rejected the request — this usually means auth is missing or invalid." +
 					"\n      Set your API key: export DUB_TOKEN=<your-key>" +
 					"\n      Run 'dub-pp-cli doctor' to check auth status."), nil
 			case strings.Contains(msg, "HTTP 401"):
-				return mcplib.NewToolResultError("authentication failed: " + sanitizeErrorBody(msg) +
+				return mcplib.NewToolResultError("authentication failed: " + cliutil.SanitizeErrorBody(msg) +
 					"\nhint: check your token." +
 					"\n      Set it with: export DUB_TOKEN=<your-key>" +
 					"\n      Run 'dub-pp-cli doctor' to check auth status."), nil
 			case strings.Contains(msg, "HTTP 403"):
-				return mcplib.NewToolResultError("permission denied: " + sanitizeErrorBody(msg) +
+				return mcplib.NewToolResultError("permission denied: " + cliutil.SanitizeErrorBody(msg) +
 					"\nhint: your credentials are valid but lack access to this resource." +
 					"\n      Set it with: export DUB_TOKEN=<your-key>" +
 					"\n      Run 'dub-pp-cli doctor' to check auth status."), nil
@@ -729,13 +733,14 @@ func handleSync(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallTo
 }
 
 func handleSearch(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	query, ok := req.Params.Arguments["query"].(string)
+	args := req.GetArguments()
+	query, ok := args["query"].(string)
 	if !ok || query == "" {
 		return mcplib.NewToolResultError("query is required"), nil
 	}
 
 	limit := 25
-	if v, ok := req.Params.Arguments["limit"].(float64); ok && v > 0 {
+	if v, ok := args["limit"].(float64); ok && v > 0 {
 		limit = int(v)
 	}
 
@@ -755,7 +760,8 @@ func handleSearch(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.Call
 }
 
 func handleSQL(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	query, ok := req.Params.Arguments["query"].(string)
+	args := req.GetArguments()
+	query, ok := args["query"].(string)
 	if !ok || query == "" {
 		return mcplib.NewToolResultError("query is required"), nil
 	}
@@ -797,5 +803,155 @@ func handleSQL(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 
 	data, _ := json.MarshalIndent(results, "", "  ")
+	return mcplib.NewToolResultText(string(data)), nil
+}
+
+func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	ctx := map[string]any{
+		"api":         "dub",
+		"description": "Dub is the modern link attribution platform for short links, conversion tracking, and affiliate programs.",
+		"archetype":   "payments",
+		"tool_count":  53,
+		"auth": map[string]any{
+			"type":     "bearer_token",
+			"env_vars": []string{"DUB_TOKEN"},
+		},
+		"resources": []map[string]any{
+			{
+				"name":        "analytics",
+				"description": "Manage analytics",
+				"endpoints":   []string{"retrieve"},
+				"searchable":  true,
+			},
+			{
+				"name":        "bounties",
+				"description": "Manage bounties",
+				"endpoints":   []string{},
+			},
+			{
+				"name":        "commissions",
+				"description": "Manage commissions",
+				"endpoints":   []string{"bulk-update", "list", "update"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "customers",
+				"description": "Manage customers",
+				"endpoints":   []string{"delete", "get", "get-id", "update"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "domains",
+				"description": "Manage domains",
+				"endpoints":   []string{"check-status", "create", "delete", "list", "register", "update"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "events",
+				"description": "Manage events",
+				"endpoints":   []string{"list"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "folders",
+				"description": "Manage folders",
+				"endpoints":   []string{"create", "delete", "list", "update"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "links",
+				"description": "Manage links",
+				"endpoints":   []string{"bulk-create", "bulk-delete", "bulk-update", "create", "delete", "get", "get-count", "get-info", "update", "upsert"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "partners",
+				"description": "Manage partners",
+				"endpoints":   []string{"approve", "ban", "create", "create-link", "deactivate", "list", "list-applications", "reject", "retrieve-analytics", "retrieve-links", "upsert-link"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "payouts",
+				"description": "Manage payouts",
+				"endpoints":   []string{"list"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "qr",
+				"description": "Manage qr",
+				"endpoints":   []string{"get-qrcode"},
+				"searchable":  true,
+			},
+			{
+				"name":        "tags",
+				"description": "Manage tags",
+				"endpoints":   []string{"create", "delete", "get", "update"},
+				"syncable":    true,
+				"searchable":  true,
+			},
+			{
+				"name":        "tokens",
+				"description": "Manage tokens",
+				"endpoints":   []string{"create-referrals-embed"},
+				"searchable":  true,
+			},
+			{
+				"name":        "track",
+				"description": "Manage track",
+				"endpoints":   []string{"lead", "open", "sale"},
+				"searchable":  true,
+			},
+		},
+		"query_tips": []string{
+			"Pagination uses cursor-based paging. Pass after parameter for subsequent pages.",
+			"Control page size with the pagesize parameter (default 100).",
+			"Use the sql tool for ad-hoc analysis on synced data. Run sync first to populate the local database.",
+			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
+			"Prefer sql/search over repeated API calls when the data is already synced.",
+		},
+		"unique_capabilities": []map[string]string{
+			{"name": "Dead-link detection", "command": "links stale", "description": "Find archived, expired, or zero-traffic links across the workspace before they pile up. Joins local link metadata...", "rationale": "Requires a local join across links and time-bucketed analytics that no /analytics endpoint returns in one call."},
+			{"name": "Performance drift detection", "command": "links drift", "description": "Detect links whose click rate dropped more than threshold percent week-over-week. Catches dying campaigns before...", "rationale": "Requires sequential analytics snapshots persisted locally — /analytics returns point-in-time, not deltas."},
+			{"name": "Duplicate destination finder", "command": "links duplicates", "description": "Find every link in the workspace pointing to the same destination URL. Surfaces accidental duplicates and...", "rationale": "Requires grouping every link's destination URL locally — the API returns links one at a time, not deduped."},
+			{"name": "Slug-collision lint", "command": "links lint", "description": "Audit short-key slugs for lookalike collisions, reserved-word violations, and brand-conflict hazards across domains.", "rationale": "Pure local-data analysis — no API endpoint to ask."},
+			{"name": "Bulk URL/UTM rewrite with diff", "command": "links rewrite", "description": "Show every link that would change and the exact patch BEFORE sending. Mass UTM or domain migrations with dry-run safety.", "rationale": "The API's bulk-update applies patches but doesn't preview. We diff locally first."},
+			{"name": "Tag-grouped campaign dashboard", "command": "campaigns", "description": "Performance dashboard aggregated by tag — clicks, leads, sales rolled up across every link wearing each tag.", "rationale": "Joins local taxonomy with cached analytics in one report — the API returns by-link, not by-tag-aggregate."},
+			{"name": "Conversion funnel attribution", "command": "funnel", "description": "Click-to-lead-to-sale conversion rates per link or campaign. Surfaces where prospects drop off in the funnel.", "rationale": "Joins local clicks, leads, and sales events on link_id and customer_id locally — the /track endpoints record each..."},
+			{"name": "Customer journey timeline", "command": "customers journey", "description": "See every link a customer clicked, when they became a lead, and when they purchased — in one timeline.", "rationale": "Requires a join across links, events, leads, and sales keyed on customer_id — the API doesn't expose this shape."},
+			{"name": "Partner leaderboard", "command": "partners leaderboard", "description": "Rank partners by commission earned, conversion rate, and clicks generated. Find your top performers and dormant...", "rationale": "Joins partners × commissions × clicks locally — the API returns by-resource, not as a ranked aggregate."},
+			{"name": "Commission audit reconciliation", "command": "partners audit-commissions", "description": "Reconcile partners, commissions, bounties, and payouts to flag stale rates, missing payouts, and expired bounties...", "rationale": "Requires a join shape only available from the local store across four resources."},
+			{"name": "Domain usage report", "command": "domains report", "description": "Per-domain link count and click distribution. Surfaces over- and under-used custom domains.", "rationale": "Aggregates link counts per domain locally — the API returns links and domains as separate flat lists."},
+			{"name": "Workspace health doctor", "command": "health", "description": "Cross-resource Monday-morning report: rate-limit headroom, expired-but-active links, dead destination URLs,...", "rationale": "Aggregates state across links, domains, tags, and rate-limit headers — no single endpoint."},
+			{"name": "Time-windowed change feed", "command": "since", "description": "What happened in the last N hours? Created, updated, deleted links plus partner approvals and top-clicked entities.", "rationale": "Requires local timestamps on every record. The API returns by-resource, not by-time."},
+			{"name": "Live event tail", "command": "tail", "description": "Stream live changes by polling the API at regular intervals. Watch new clicks, leads, and sales as they happen.", "rationale": "Real-time monitoring loop — different from `since` which looks backward at history."},
+		},
+		"playbook": []map[string]string{
+			{"topic": "Dead-link detection", "insight": "Requires a local join across links and time-bucketed analytics that no /analytics endpoint returns in one call."},
+			{"topic": "Performance drift detection", "insight": "Requires sequential analytics snapshots persisted locally — /analytics returns point-in-time, not deltas."},
+			{"topic": "Duplicate destination finder", "insight": "Requires grouping every link's destination URL locally — the API returns links one at a time, not deduped."},
+			{"topic": "Slug-collision lint", "insight": "Pure local-data analysis — no API endpoint to ask."},
+			{"topic": "Bulk URL/UTM rewrite with diff", "insight": "The API's bulk-update applies patches but doesn't preview. We diff locally first."},
+			{"topic": "Tag-grouped campaign dashboard", "insight": "Joins local taxonomy with cached analytics in one report — the API returns by-link, not by-tag-aggregate."},
+			{"topic": "Conversion funnel attribution", "insight": "Joins local clicks, leads, and sales events on link_id and customer_id locally — the /track endpoints record each event in isolation."},
+			{"topic": "Customer journey timeline", "insight": "Requires a join across links, events, leads, and sales keyed on customer_id — the API doesn't expose this shape."},
+			{"topic": "Partner leaderboard", "insight": "Joins partners × commissions × clicks locally — the API returns by-resource, not as a ranked aggregate."},
+			{"topic": "Commission audit reconciliation", "insight": "Requires a join shape only available from the local store across four resources."},
+			{"topic": "Domain usage report", "insight": "Aggregates link counts per domain locally — the API returns links and domains as separate flat lists."},
+			{"topic": "Workspace health doctor", "insight": "Aggregates state across links, domains, tags, and rate-limit headers — no single endpoint."},
+			{"topic": "Time-windowed change feed", "insight": "Requires local timestamps on every record. The API returns by-resource, not by-time."},
+			{"topic": "Live event tail", "insight": "Real-time monitoring loop — different from `since` which looks backward at history."},
+			{"topic": "Financial data", "insight": "Always use read-only operations for financial queries. Never use create/update tools for payment data without explicit user confirmation."},
+			{"topic": "Reconciliation", "insight": "For reconciliation tasks, sync first then use sql for cross-referencing. API pagination over financial records is slow and rate-limited."},
+		},
+	}
+	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
 }

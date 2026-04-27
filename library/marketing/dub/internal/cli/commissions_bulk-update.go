@@ -50,7 +50,11 @@ func newCommissionsBulkUpdateCmd(flags *rootFlags) *cobra.Command {
 			} else {
 				body = map[string]any{}
 				if bodyCommissionIds != "" {
-					body["commissionIds"] = bodyCommissionIds
+					var parsedCommissionIds any
+					if err := json.Unmarshal([]byte(bodyCommissionIds), &parsedCommissionIds); err != nil {
+						return fmt.Errorf("parsing --commission-ids JSON: %w", err)
+					}
+					body["commissionIds"] = parsedCommissionIds
 				}
 				if bodyStatus != "" {
 					body["status"] = bodyStatus
@@ -86,13 +90,15 @@ func newCommissionsBulkUpdateCmd(flags *rootFlags) *cobra.Command {
 				if flags.quiet {
 					return nil
 				}
-				// Apply --compact and --select to the API response before wrapping
+				// Apply --compact and --select to the API response before wrapping.
+				// --select wins when both are set: explicit field choice trumps the
+				// generic high-gravity allow-list. Otherwise --compact still applies
+				// when --agent is on but the user did not name fields.
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				envelope := map[string]any{
 					"action":   "patch",

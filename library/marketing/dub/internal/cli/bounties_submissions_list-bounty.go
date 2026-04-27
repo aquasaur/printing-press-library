@@ -30,6 +30,45 @@ func newBountiesSubmissionsListBountyCmd(flags *rootFlags) *cobra.Command {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
+			if cmd.Flags().Changed("status") {
+				allowedStatus := []string{"draft", "submitted", "approved", "rejected"}
+				validStatus := false
+				for _, v := range allowedStatus {
+					if flagStatus == v {
+						validStatus = true
+						break
+					}
+				}
+				if !validStatus {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "status", flagStatus, allowedStatus)
+				}
+			}
+			if cmd.Flags().Changed("sort-by") {
+				allowedSortBy := []string{"completedAt", "performanceCount", "socialMetricCount"}
+				validSortBy := false
+				for _, v := range allowedSortBy {
+					if flagSortBy == v {
+						validSortBy = true
+						break
+					}
+				}
+				if !validSortBy {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-by", flagSortBy, allowedSortBy)
+				}
+			}
+			if cmd.Flags().Changed("sort-order") {
+				allowedSortOrder := []string{"asc", "desc"}
+				validSortOrder := false
+				for _, v := range allowedSortOrder {
+					if flagSortOrder == v {
+						validSortOrder = true
+						break
+					}
+				}
+				if !validSortOrder {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-order", flagSortOrder, allowedSortOrder)
+				}
+			}
 			c, err := flags.newClient()
 			if err != nil {
 				return err
@@ -55,14 +94,15 @@ func newBountiesSubmissionsListBountyCmd(flags *rootFlags) *cobra.Command {
 				_ = json.Unmarshal(data, &countItems)
 				printProvenance(cmd, len(countItems), prov)
 			}
-			// For JSON output, wrap with provenance envelope before passing through flags
+			// For JSON output, wrap with provenance envelope before passing through flags.
+			// --select wins over --compact when both are set; --compact only runs when
+			// no explicit fields were requested.
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
 				if wrapErr != nil {
@@ -86,11 +126,11 @@ func newBountiesSubmissionsListBountyCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
-	cmd.Flags().StringVar(&flagStatus, "status", "", "The status of the submissions to list.")
+	cmd.Flags().StringVar(&flagStatus, "status", "", "The status of the submissions to list. (one of: draft, submitted, approved, rejected)")
 	cmd.Flags().StringVar(&flagGroupId, "group-id", "", "The ID of the group to list submissions for.")
 	cmd.Flags().StringVar(&flagPartnerId, "partner-id", "", "The ID of the partner to list submissions for.")
-	cmd.Flags().StringVar(&flagSortBy, "sort-by", "completedAt", "The field to sort the submissions by.")
-	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "asc", "The order to sort the submissions by.")
+	cmd.Flags().StringVar(&flagSortBy, "sort-by", "completedAt", "The field to sort the submissions by. (one of: completedAt, performanceCount, socialMetricCount)")
+	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "asc", "The order to sort the submissions by. (one of: asc, desc)")
 	cmd.Flags().Float64Var(&flagPage, "page", 0.0, "The page number for pagination.")
 	cmd.Flags().Float64Var(&flagPageSize, "page-size", 100.000000, "The number of items per page.")
 	cmd.Flags().BoolVar(&flagAll, "all", false, "Fetch all pages")

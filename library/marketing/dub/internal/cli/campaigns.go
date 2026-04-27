@@ -1,129 +1,188 @@
+// Copyright 2026 trevin-chow. Licensed under Apache-2.0. See LICENSE.
+
+// campaigns groups synced links by tag and aggregates click/lead/sale totals
+// per campaign. Reads from the local /store cache (store.Open-backed); does
+// not call the live API.
+
 package cli
 
 import (
 	"encoding/json"
 	"fmt"
-	"text/tabwriter"
+	"sort"
+	"strings"
 
-	"github.com/mvanhorn/printing-press-library/library/marketing/dub/internal/store"
 	"github.com/spf13/cobra"
 )
 
+type campaignRow struct {
+	Tag         string `json:"tag"`
+	TotalLinks  int    `json:"total_links"`
+	TotalClicks int    `json:"total_clicks"`
+	TotalLeads  int    `json:"total_leads"`
+	TotalSales  int    `json:"total_sales"`
+	TopLink     string `json:"top_link,omitempty"`
+}
+
 func newCampaignsCmd(flags *rootFlags) *cobra.Command {
-	var dbPath string
-	var limit int
 	var sortBy string
+	var minClicks int
+	var limit int
+	var interval string
 
 	cmd := &cobra.Command{
 		Use:   "campaigns",
-		Short: "Campaign performance dashboard — analytics aggregated by tag",
-		Long: `Aggregates link analytics by tag to show campaign-level performance.
-Requires synced data (run 'sync --full' first). Groups all links sharing a
-tag and sums their clicks, leads, and sales to produce a per-campaign view
-that the Dub dashboard cannot show natively.`,
-		Example: `  # Show campaign performance
-  dub-pp-cli campaigns
+		Short: "Tag-grouped performance dashboard — clicks, leads, sales rolled up per tag",
+		Long: `Aggregate clicks, leads, and sales for every tag in your workspace. Joins the
+local link cache with each link's analytics fields. Surfaces the top campaign tag
+and a representative top-performing link per tag.
 
-  # Sort by sales descending
-  dub-pp-cli campaigns --sort sales
+Reads from the local store. Run sync first.`,
+		Example: `  # All tags ranked by total clicks
+  dub-pp-cli campaigns --json
 
-  # Top 5 campaigns as JSON
-  dub-pp-cli campaigns --limit 5 --json`,
+  # Limit to top 10 campaigns by sales
+  dub-pp-cli campaigns --sort-by sales --limit 10 --agent
+
+  # Hide tags with fewer than 100 cumulative clicks
+  dub-pp-cli campaigns --min-clicks 100`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if dbPath == "" {
-				dbPath = defaultDBPath("dub-pp-cli")
-			}
-			s, err := store.Open(dbPath)
+			db, err := openStoreForRead("dub-pp-cli")
 			if err != nil {
-				return fmt.Errorf("opening store: %w", err)
+				return apiErr(fmt.Errorf("open local store: %w", err))
 			}
-			defer s.Close()
-
-			orderCol := "clicks"
-			switch sortBy {
-			case "leads":
-				orderCol = "leads"
-			case "sales":
-				orderCol = "sales"
-			case "links":
-				orderCol = "link_count"
-			case "name":
-				orderCol = "tag_name"
+			if db == nil {
+				return notFoundErr(fmt.Errorf("no local store found. run `dub-pp-cli sync --full` first"))
 			}
+			defer db.Close()
 
-			query := fmt.Sprintf(`
-				SELECT
-					t.id,
-					json_extract(t.data, '$.name') AS tag_name,
-					json_extract(t.data, '$.color') AS tag_color,
-					COUNT(DISTINCT l.id) AS link_count,
-					COALESCE(SUM(CAST(json_extract(l.data, '$.clicks') AS INTEGER)), 0) AS clicks,
-					COALESCE(SUM(CAST(json_extract(l.data, '$.leads') AS INTEGER)), 0) AS leads,
-					COALESCE(SUM(CAST(json_extract(l.data, '$.sales') AS INTEGER)), 0) AS sales,
-					COALESCE(SUM(CAST(json_extract(l.data, '$.saleAmount') AS REAL)), 0) AS sale_amount
-				FROM tags t
-				LEFT JOIN links l ON (
-					json_extract(l.data, '$.tagId') = t.id
-					OR instr(json_extract(l.data, '$.tags'), json_extract(t.data, '$.name')) > 0
-				)
-				GROUP BY t.id, tag_name
-				ORDER BY %s DESC
-				LIMIT ?
-			`, orderCol)
-
-			rows, err := s.Query(query, limit)
+			rows, err := db.DB().Query(`SELECT data FROM links WHERE archived = 0 OR archived IS NULL`)
 			if err != nil {
-				return fmt.Errorf("querying campaigns: %w", err)
+				return apiErr(fmt.Errorf("query links: %w", err))
 			}
 			defer rows.Close()
 
-			type campaign struct {
-				TagID      string  `json:"tag_id"`
-				TagName    string  `json:"tag_name"`
-				TagColor   string  `json:"tag_color"`
-				LinkCount  int     `json:"link_count"`
-				Clicks     int     `json:"clicks"`
-				Leads      int     `json:"leads"`
-				Sales      int     `json:"sales"`
-				SaleAmount float64 `json:"sale_amount"`
-			}
-
-			var results []campaign
+			agg := make(map[string]*campaignRow)
+			topPerTag := make(map[string]int) // tag -> max clicks seen
+			topLinkPerTag := make(map[string]string)
 			for rows.Next() {
-				var c campaign
-				if err := rows.Scan(&c.TagID, &c.TagName, &c.TagColor, &c.LinkCount, &c.Clicks, &c.Leads, &c.Sales, &c.SaleAmount); err != nil {
-					return fmt.Errorf("scanning row: %w", err)
+				var raw string
+				if err := rows.Scan(&raw); err != nil {
+					continue
 				}
-				results = append(results, c)
+				var obj map[string]any
+				if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+					continue
+				}
+				tags := tagNamesFrom(obj)
+				if len(tags) == 0 {
+					tags = []string{"(untagged)"}
+				}
+				clicks := intField(obj, "clicks")
+				leads := intField(obj, "leads")
+				sales := intField(obj, "sales")
+				short := stringField(obj, "shortLink")
+				for _, tag := range tags {
+					row, ok := agg[tag]
+					if !ok {
+						row = &campaignRow{Tag: tag}
+						agg[tag] = row
+					}
+					row.TotalLinks++
+					row.TotalClicks += clicks
+					row.TotalLeads += leads
+					row.TotalSales += sales
+					if clicks > topPerTag[tag] {
+						topPerTag[tag] = clicks
+						topLinkPerTag[tag] = short
+					}
+				}
 			}
-			if err := rows.Err(); err != nil {
-				return err
+			out := make([]campaignRow, 0, len(agg))
+			for _, r := range agg {
+				if r.TotalClicks < minClicks {
+					continue
+				}
+				r.TopLink = topLinkPerTag[r.Tag]
+				out = append(out, *r)
+			}
+			sortCampaigns(out, sortBy)
+			if limit > 0 && len(out) > limit {
+				out = out[:limit]
 			}
 
-			if flags.asJSON {
-				enc := json.NewEncoder(cmd.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(results)
+			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
+				return flags.printJSON(cmd, out)
 			}
-
-			if len(results) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No campaign data. Run 'sync --full' to populate.")
+			if len(out) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "no campaigns found (try lowering --min-clicks or running sync)")
 				return nil
 			}
-
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			fmt.Fprintln(w, "TAG\tLINKS\tCLICKS\tLEADS\tSALES\tREVENUE")
-			for _, c := range results {
-				fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t$%.2f\n",
-					c.TagName, c.LinkCount, c.Clicks, c.Leads, c.Sales, c.SaleAmount/100)
+			headers := []string{"TAG", "LINKS", "CLICKS", "LEADS", "SALES", "TOP_LINK"}
+			rowsTbl := make([][]string, 0, len(out))
+			for _, r := range out {
+				rowsTbl = append(rowsTbl, []string{r.Tag, fmt.Sprintf("%d", r.TotalLinks), fmt.Sprintf("%d", r.TotalClicks), fmt.Sprintf("%d", r.TotalLeads), fmt.Sprintf("%d", r.TotalSales), r.TopLink})
 			}
-			return w.Flush()
+			return flags.printTable(cmd, headers, rowsTbl)
 		},
 	}
 
-	cmd.Flags().StringVar(&dbPath, "db", "", "Database path")
-	cmd.Flags().IntVar(&limit, "limit", 25, "Max campaigns to show")
-	cmd.Flags().StringVar(&sortBy, "sort", "clicks", "Sort by: clicks, leads, sales, links, name")
-
+	cmd.Flags().StringVar(&sortBy, "sort-by", "clicks", "Sort by: clicks, leads, sales, links")
+	cmd.Flags().IntVar(&minClicks, "min-clicks", 0, "Hide campaigns with fewer total clicks")
+	cmd.Flags().IntVar(&limit, "limit", 0, "Cap output to top N campaigns (0 = no limit)")
+	cmd.Flags().StringVar(&interval, "interval", "all", "Time interval (e.g. 24h, 7d, 30d, all). Reserved for future analytics-cache joins; today campaigns reads the current local snapshot.")
+	_ = interval
 	return cmd
+}
+
+// tagNamesFrom extracts tag names from a link object.
+// Dub's API returns either `tags: [{id, name, color}, ...]` (full) or
+// `tagNames: ["x", "y"]` (compact). Handle both.
+func tagNamesFrom(obj map[string]any) []string {
+	out := []string{}
+	if names, ok := obj["tagNames"].([]any); ok {
+		for _, n := range names {
+			if s, ok := n.(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	if tags, ok := obj["tags"].([]any); ok {
+		for _, t := range tags {
+			if m, ok := t.(map[string]any); ok {
+				if name, ok := m["name"].(string); ok {
+					out = append(out, name)
+				}
+			}
+		}
+	}
+	return uniqueStrings(out)
+}
+
+func uniqueStrings(in []string) []string {
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func sortCampaigns(rows []campaignRow, by string) {
+	by = strings.ToLower(strings.TrimSpace(by))
+	sort.Slice(rows, func(i, j int) bool {
+		switch by {
+		case "leads":
+			return rows[i].TotalLeads > rows[j].TotalLeads
+		case "sales":
+			return rows[i].TotalSales > rows[j].TotalSales
+		case "links":
+			return rows[i].TotalLinks > rows[j].TotalLinks
+		default: // clicks
+			return rows[i].TotalClicks > rows[j].TotalClicks
+		}
+	})
 }

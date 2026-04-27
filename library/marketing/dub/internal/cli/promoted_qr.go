@@ -4,12 +4,53 @@
 package cli
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 )
+
+// isBinaryPayload reports whether data looks like raw bytes rather than JSON.
+// JSON responses always start with '{' or '[' (after any leading whitespace),
+// so anything else is treated as binary. Used by the qr endpoint, which
+// returns image/png directly instead of a JSON envelope.
+func isBinaryPayload(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	// Skip leading whitespace
+	i := 0
+	for i < len(data) && (data[i] == ' ' || data[i] == '\t' || data[i] == '\n' || data[i] == '\r') {
+		i++
+	}
+	if i >= len(data) {
+		return false
+	}
+	switch data[i] {
+	case '{', '[', '"':
+		return false
+	}
+	return true
+}
+
+// detectImageFormat inspects magic bytes and returns "png", "jpeg", "svg", or
+// "binary" when nothing matches. Used to label the JSON envelope when --json
+// is requested for image responses.
+func detectImageFormat(data []byte) string {
+	if len(data) >= 8 && data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G' {
+		return "png"
+	}
+	if len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+		return "jpeg"
+	}
+	// SVG starts with "<?xml" or "<svg" (text)
+	if len(data) >= 5 && (string(data[:5]) == "<?xml" || (len(data) >= 4 && string(data[:4]) == "<svg")) {
+		return "svg"
+	}
+	return "binary"
+}
 
 func newQrPromotedCmd(flags *rootFlags) *cobra.Command {
 	var flagUrl string
@@ -29,7 +70,20 @@ func newQrPromotedCmd(flags *rootFlags) *cobra.Command {
 		Example: "  dub-pp-cli qr",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("url") && !flags.dryRun {
-				return fmt.Errorf("required flag \"%s\" not set", "url")
+				return usageErr(fmt.Errorf("required flag \"%s\" not set", "url"))
+			}
+			if cmd.Flags().Changed("level") {
+				allowedLevel := []string{"L", "M", "Q", "H"}
+				validLevel := false
+				for _, v := range allowedLevel {
+					if flagLevel == v {
+						validLevel = true
+						break
+					}
+				}
+				if !validLevel {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "level", flagLevel, allowedLevel)
+				}
 			}
 			c, err := flags.newClient()
 			if err != nil {
@@ -69,6 +123,34 @@ func newQrPromotedCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return classifyAPIError(err)
 			}
+
+			// /qr returns raw image bytes (PNG by default), not JSON. Detect by
+			// inspecting the first bytes — a JSON response would start with '{'
+			// or '[', a PNG with 0x89 ("\x89PNG..."). When the payload is binary,
+			// emit the bytes directly to stdout (or base64 inside a JSON envelope
+			// if --json is set), bypassing the normal JSON pipe entirely.
+			if isBinaryPayload(data) {
+				printProvenance(cmd, 1, prov)
+				if flags.asJSON {
+					envelope := map[string]any{
+						"format":      detectImageFormat(data),
+						"size_bytes":  len(data),
+						"data_base64": base64.StdEncoding.EncodeToString(data),
+						"meta": map[string]any{
+							"source":    prov.Source,
+							"freshness": prov.Freshness,
+						},
+					}
+					return json.NewEncoder(cmd.OutOrStdout()).Encode(envelope)
+				}
+				// Raw bytes — pipe to a file: dub-pp-cli qr --url ... > qr.png
+				_, werr := cmd.OutOrStdout().Write(data)
+				if werr == nil && isTerminal(cmd.OutOrStdout()) {
+					fmt.Fprintln(os.Stderr, "\nhint: pipe to a file to save the QR image, e.g. dub-pp-cli qr --url <url> > qr.png")
+				}
+				return werr
+			}
+
 			// Unwrap API response envelopes (e.g. {"status":"success","data":[...]})
 			// so output helpers see the inner data, not the wrapper.
 			data = extractResponseData(data)
@@ -86,14 +168,15 @@ func newQrPromotedCmd(flags *rootFlags) *cobra.Command {
 			if flags.csv {
 				return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 			}
-			// For JSON output, wrap with provenance envelope
+			// For JSON output, wrap with provenance envelope. --select wins over
+			// --compact when both are set; --compact only runs when no explicit
+			// fields were requested.
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
 				if wrapErr != nil {
@@ -119,7 +202,7 @@ func newQrPromotedCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&flagUrl, "url", "", "The URL to generate a QR code for.")
 	cmd.Flags().StringVar(&flagLogo, "logo", "", "The logo to include in the QR code. Can only be used with a paid plan on Dub.")
 	cmd.Flags().Float64Var(&flagSize, "size", 600.000000, "The size of the QR code in pixels. Defaults to `600` if not provided.")
-	cmd.Flags().StringVar(&flagLevel, "level", "L", "The level of error correction to use for the QR code. Defaults to `L` if not provided.")
+	cmd.Flags().StringVar(&flagLevel, "level", "L", "The level of error correction to use for the QR code. Defaults to `L` if not provided. (one of: L, M, Q, H)")
 	cmd.Flags().StringVar(&flagFgColor, "fg-color", "#000000", "The foreground color of the QR code in hex format. Defaults to `#000000` if not provided.")
 	cmd.Flags().StringVar(&flagBgColor, "bg-color", "#FFFFFF", "The background color of the QR code in hex format. Defaults to `#ffffff` if not provided.")
 	cmd.Flags().BoolVar(&flagHideLogo, "hide-logo", false, "Whether to hide the logo in the QR code. Can only be used with a paid plan on Dub.")

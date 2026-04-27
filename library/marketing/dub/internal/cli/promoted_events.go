@@ -58,10 +58,88 @@ func newEventsPromotedCmd(flags *rootFlags) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:     "events",
-		Short:   "Retrieve a list of events",
-		Long:    "Shortcut for 'events list'. Retrieve a list of events",
+		Short:   "List all events",
+		Long:    "Shortcut for 'events list'. List all events",
 		Example: "  dub-pp-cli events",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("event") {
+				allowedEvent := []string{"clicks", "leads", "sales"}
+				validEvent := false
+				for _, v := range allowedEvent {
+					if flagEvent == v {
+						validEvent = true
+						break
+					}
+				}
+				if !validEvent {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "event", flagEvent, allowedEvent)
+				}
+			}
+			if cmd.Flags().Changed("interval") {
+				allowedInterval := []string{"24h", "7d", "30d", "90d", "1y", "mtd", "qtd", "ytd", "all"}
+				validInterval := false
+				for _, v := range allowedInterval {
+					if flagInterval == v {
+						validInterval = true
+						break
+					}
+				}
+				if !validInterval {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "interval", flagInterval, allowedInterval)
+				}
+			}
+			if cmd.Flags().Changed("sale-type") {
+				allowedSaleType := []string{"new", "recurring"}
+				validSaleType := false
+				for _, v := range allowedSaleType {
+					if flagSaleType == v {
+						validSaleType = true
+						break
+					}
+				}
+				if !validSaleType {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sale-type", flagSaleType, allowedSaleType)
+				}
+			}
+			if cmd.Flags().Changed("sort-order") {
+				allowedSortOrder := []string{"asc", "desc"}
+				validSortOrder := false
+				for _, v := range allowedSortOrder {
+					if flagSortOrder == v {
+						validSortOrder = true
+						break
+					}
+				}
+				if !validSortOrder {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-order", flagSortOrder, allowedSortOrder)
+				}
+			}
+			if cmd.Flags().Changed("sort-by") {
+				allowedSortBy := []string{"timestamp"}
+				validSortBy := false
+				for _, v := range allowedSortBy {
+					if flagSortBy == v {
+						validSortBy = true
+						break
+					}
+				}
+				if !validSortBy {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "sort-by", flagSortBy, allowedSortBy)
+				}
+			}
+			if cmd.Flags().Changed("order") {
+				allowedOrder := []string{"asc", "desc"}
+				validOrder := false
+				for _, v := range allowedOrder {
+					if flagOrder == v {
+						validOrder = true
+						break
+					}
+				}
+				if !validOrder {
+					fmt.Fprintf(os.Stderr, "warning: --%s %q not in allowed set %v\n", "order", flagOrder, allowedOrder)
+				}
+			}
 			c, err := flags.newClient()
 			if err != nil {
 				return err
@@ -132,14 +210,15 @@ func newEventsPromotedCmd(flags *rootFlags) *cobra.Command {
 			if flags.csv {
 				return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 			}
-			// For JSON output, wrap with provenance envelope
+			// For JSON output, wrap with provenance envelope. --select wins over
+			// --compact when both are set; --compact only runs when no explicit
+			// fields were requested.
 			if flags.asJSON || !isTerminal(cmd.OutOrStdout()) {
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				wrapped, wrapErr := wrapWithProvenance(filtered, prov)
 				if wrapErr != nil {
@@ -162,7 +241,7 @@ func newEventsPromotedCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
-	cmd.Flags().StringVar(&flagEvent, "event", "clicks", "The type of event to retrieve analytics for. Defaults to 'clicks'.")
+	cmd.Flags().StringVar(&flagEvent, "event", "clicks", "The type of event to retrieve analytics for. Defaults to 'clicks'. (one of: clicks, leads, sales)")
 	cmd.Flags().StringVar(&flagDomain, "domain", "", "The domain to filter analytics for. Supports advanced filtering: single value, multiple values (comma-separated), or...")
 	cmd.Flags().StringVar(&flagKey, "key", "", "The slug of the short link to retrieve analytics for. Must be used along with the corresponding `domain` of the...")
 	cmd.Flags().StringVar(&flagLinkId, "link-id", "", "The unique ID of the link to retrieve analytics for.Supports advanced filtering: single value, multiple values...")
@@ -173,7 +252,7 @@ func newEventsPromotedCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&flagGroupId, "group-id", "", "The group ID to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().StringVar(&flagPartnerId, "partner-id", "", "The ID of the partner to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().StringVar(&flagCustomerId, "customer-id", "", "The ID of the customer to retrieve analytics for.")
-	cmd.Flags().StringVar(&flagInterval, "interval", "", "The interval to retrieve analytics for. If undefined, defaults to 24h.")
+	cmd.Flags().StringVar(&flagInterval, "interval", "", "The interval to retrieve analytics for. If undefined, defaults to 24h. (one of: 24h, 7d, 30d, 90d, 1y, mtd, qtd, ytd, all)")
 	cmd.Flags().StringVar(&flagStart, "start", "", "The start date and time when to retrieve analytics from. If set, takes precedence over `interval`.")
 	cmd.Flags().StringVar(&flagEnd, "end", "", "The end date and time when to retrieve analytics from. If not provided, defaults to the current date. If set along...")
 	cmd.Flags().StringVar(&flagTimezone, "timezone", "UTC", "The IANA time zone code for aligning timeseries granularity (e.g. America/New_York). Defaults to UTC.")
@@ -194,16 +273,16 @@ func newEventsPromotedCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&flagUtmTerm, "utm-term", "", "The UTM term to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().StringVar(&flagUtmContent, "utm-content", "", "The UTM content to retrieve analytics for. Supports advanced filtering: single value, multiple values...")
 	cmd.Flags().BoolVar(&flagRoot, "root", false, "Filter for root domains. If true, filter for domains only. If false, filter for links only. If undefined, return both.")
-	cmd.Flags().StringVar(&flagSaleType, "sale-type", "", "Filter sales by type: 'new' for first-time purchases, 'recurring' for repeat purchases. If undefined, returns both.")
+	cmd.Flags().StringVar(&flagSaleType, "sale-type", "", "Filter sales by type: 'new' for first-time purchases, 'recurring' for repeat purchases. If undefined, returns both. (one of: new, recurring)")
 	cmd.Flags().StringVar(&flagQuery, "query", "", "Search the events by a custom metadata value. Only available for lead and sale events. Examples:...")
 	cmd.Flags().StringVar(&flagProgramId, "program-id", "", "Deprecated: This is automatically inferred from your workspace's defaultProgramId. The ID of the program to retrieve...")
 	cmd.Flags().StringVar(&flagTagIds, "tag-ids", "", "Deprecated: Use `tagId` instead. The tag IDs to retrieve analytics for.")
 	cmd.Flags().BoolVar(&flagQr, "qr", false, "Deprecated: Use the `trigger` field instead. Filter for QR code scans. If true, filter for QR codes only. If false,...")
 	cmd.Flags().Float64Var(&flagPage, "page", 1.000000, "Page")
 	cmd.Flags().Float64Var(&flagLimit, "limit", 100.000000, "Limit")
-	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "desc", "The sort order. The default is `desc`.")
-	cmd.Flags().StringVar(&flagSortBy, "sort-by", "timestamp", "The field to sort the events by. The default is `timestamp`.")
-	cmd.Flags().StringVar(&flagOrder, "order", "desc", "DEPRECATED. Use `sortOrder` instead.")
+	cmd.Flags().StringVar(&flagSortOrder, "sort-order", "desc", "The sort order. The default is `desc`. (one of: asc, desc)")
+	cmd.Flags().StringVar(&flagSortBy, "sort-by", "timestamp", "The field to sort the events by. The default is `timestamp`. (one of: timestamp)")
+	cmd.Flags().StringVar(&flagOrder, "order", "desc", "DEPRECATED. Use `sortOrder` instead. (one of: asc, desc)")
 	cmd.Flags().BoolVar(&flagAll, "all", false, "Fetch all pages")
 
 	// Wire sibling endpoints and sub-resources as subcommands

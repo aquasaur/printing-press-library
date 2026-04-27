@@ -50,17 +50,20 @@ func Load(configPath string) (*Config, error) {
 		}
 	}
 
-	// Env var overrides
+	// Env var overrides. DUB_TOKEN is the primary name; DUB_API_KEY is accepted
+	// as an alias because that's what Dub's own docs use as the example variable.
 	if v := os.Getenv("DUB_TOKEN"); v != "" {
 		cfg.DubToken = v
 		cfg.AuthSource = "env:DUB_TOKEN"
+	} else if v := os.Getenv("DUB_API_KEY"); v != "" {
+		cfg.DubToken = v
+		cfg.AuthSource = "env:DUB_API_KEY"
 	}
 
 	// Base URL override (used by printing-press verify to point at mock/test servers)
 	if v := os.Getenv("DUB_BASE_URL"); v != "" {
 		cfg.BaseURL = v
 	}
-
 	return cfg, nil
 }
 

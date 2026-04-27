@@ -87,13 +87,15 @@ func newPartnersBanCmd(flags *rootFlags) *cobra.Command {
 				if flags.quiet {
 					return nil
 				}
-				// Apply --compact and --select to the API response before wrapping
+				// Apply --compact and --select to the API response before wrapping.
+				// --select wins when both are set: explicit field choice trumps the
+				// generic high-gravity allow-list. Otherwise --compact still applies
+				// when --agent is on but the user did not name fields.
 				filtered := data
-				if flags.compact {
-					filtered = compactFields(filtered)
-				}
 				if flags.selectFields != "" {
 					filtered = filterFields(filtered, flags.selectFields)
+				} else if flags.compact {
+					filtered = compactFields(filtered)
 				}
 				envelope := map[string]any{
 					"action":   "post",
@@ -123,7 +125,7 @@ func newPartnersBanCmd(flags *rootFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&bodyPartnerId, "partner-id", "", "The ID of the partner to create a link for. Will take precedence over `tenantId` if provided.")
-	cmd.Flags().StringVar(&bodyReason, "reason", "", "Reason")
+	cmd.Flags().StringVar(&bodyReason, "reason", "", "The reason for banning the partner.")
 	cmd.Flags().StringVar(&bodyTenantId, "tenant-id", "", "The ID of the partner in your system. If both `partnerId` and `tenantId` are not provided, an error will be thrown.")
 	cmd.Flags().BoolVar(&stdinBody, "stdin", false, "Read request body as JSON from stdin")
 
