@@ -17,6 +17,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/media-and-entertainment/hackernews/internal/client"
 	"github.com/mvanhorn/printing-press-library/library/media-and-entertainment/hackernews/internal/config"
 	"github.com/mvanhorn/printing-press-library/library/media-and-entertainment/hackernews/internal/store"
+	"os/exec"
 )
 
 // RegisterTools registers all API operations as MCP tools.
@@ -328,6 +329,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "Hacker News from your terminal — with a local store, full-text search, and agent-native output no other HN tool has",
 		"archetype":   "generic",
 		"tool_count":  10,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion hackernews-pp-cli binary; the MCP cannot invoke them.",
 		"resources": []map[string]any{
 			{
 				"name":        "ask",
@@ -379,17 +381,17 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Front-page diff", "command": "since", "description": "Show what changed on the front page since last check — stories that appeared, disappeared, or moved.", "rationale": "Requires SQLite snapshots of prior front-page state. Live API has no concept of 'change'."},
-			{"name": "Topic pulse", "command": "pulse", "description": "What HN is saying about a topic this week — score, comment, frequency by day.", "rationale": "Aggregates Algolia date+tag results into a velocity table; the API returns hits, not aggregations."},
-			{"name": "Submission tracker", "command": "my", "description": "Track a user's submissions with score buckets, traction rate, and best posting time hints.", "rationale": "Joins user.submitted IDs with Algolia hit metadata; not a single endpoint."},
-			{"name": "Hiring stats", "command": "hiring-stats", "description": "Aggregate Who's Hiring across recent months: languages, remote ratio, top companies.", "rationale": "Requires fetching multiple monthly threads and parsing free-form posts. No single endpoint."},
-			{"name": "Controversial", "command": "controversial", "description": "Find stories with the highest comment-to-point ratio — the polarizing discussions.", "rationale": "Pure local SQL ranking from synced stories; no live equivalent."},
-			{"name": "Repost finder", "command": "repost", "description": "Has this URL been posted on HN before? Lists prior submissions with scores and dates.", "rationale": "Algolia URL search composed with a per-hit score lookup."},
-			{"name": "Story velocity", "command": "velocity", "description": "Show a story's rank trajectory from local snapshots (climb, fall, stalled).", "rationale": "Requires multiple sync snapshots; no live API surface for rank-over-time."},
-			{"name": "Thread tldr (structured)", "command": "tldr", "description": "Deterministic thread digest: top authors by reply count, root vs reply ratio, comment heat metric.", "rationale": "One-shot Algolia /items/{id} fetch + structured aggregation. No AI placeholder; computed metrics only."},
-			{"name": "Local FTS search", "command": "local-search", "description": "Offline FTS5 search across every story and comment you've touched.", "rationale": "Reads from SQLite store populated by sync + write-through cache. Algolia drops history."},
-			{"name": "Sync foundation", "command": "sync", "description": "Pull top/best/new lists into local SQLite for offline use and snapshot history.", "rationale": "Foundation enabling since/controversial/local-search/velocity. No competing CLI persists state."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Front-page diff", "command": "since", "description": "Show what changed on the front page since last check — stories that appeared, disappeared, or moved.", "rationale": "Requires SQLite snapshots of prior front-page state. Live API has no concept of 'change'.", "via": "cli"},
+			{"name": "Topic pulse", "command": "pulse", "description": "What HN is saying about a topic this week — score, comment, frequency by day.", "rationale": "Aggregates Algolia date+tag results into a velocity table; the API returns hits, not aggregations.", "via": "cli"},
+			{"name": "Submission tracker", "command": "my", "description": "Track a user's submissions with score buckets, traction rate, and best posting time hints.", "rationale": "Joins user.submitted IDs with Algolia hit metadata; not a single endpoint.", "via": "cli"},
+			{"name": "Hiring stats", "command": "hiring-stats", "description": "Aggregate Who's Hiring across recent months: languages, remote ratio, top companies.", "rationale": "Requires fetching multiple monthly threads and parsing free-form posts. No single endpoint.", "via": "cli"},
+			{"name": "Controversial", "command": "controversial", "description": "Find stories with the highest comment-to-point ratio — the polarizing discussions.", "rationale": "Pure local SQL ranking from synced stories; no live equivalent.", "via": "cli"},
+			{"name": "Repost finder", "command": "repost", "description": "Has this URL been posted on HN before? Lists prior submissions with scores and dates.", "rationale": "Algolia URL search composed with a per-hit score lookup.", "via": "cli"},
+			{"name": "Story velocity", "command": "velocity", "description": "Show a story's rank trajectory from local snapshots (climb, fall, stalled).", "rationale": "Requires multiple sync snapshots; no live API surface for rank-over-time.", "via": "cli"},
+			{"name": "Thread tldr (structured)", "command": "tldr", "description": "Deterministic thread digest: top authors by reply count, root vs reply ratio, comment heat metric.", "rationale": "One-shot Algolia /items/{id} fetch + structured aggregation. No AI placeholder; computed metrics only.", "via": "cli"},
+			{"name": "Local FTS search", "command": "local-search", "description": "Offline FTS5 search across every story and comment you've touched.", "rationale": "Reads from SQLite store populated by sync + write-through cache. Algolia drops history.", "via": "cli"},
+			{"name": "Sync foundation", "command": "sync", "description": "Pull top/best/new lists into local SQLite for offline use and snapshot history.", "rationale": "Foundation enabling since/controversial/local-search/velocity. No competing CLI persists state.", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Front-page diff", "insight": "Requires SQLite snapshots of prior front-page state. Live API has no concept of 'change'."},
@@ -406,4 +408,140 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
+	s.AddTool(
+		mcplib.NewTool("since",
+			mcplib.WithDescription("Show what changed on the front page since last check — stories that appeared, disappeared, or moved."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("since"),
+	)
+	s.AddTool(
+		mcplib.NewTool("pulse",
+			mcplib.WithDescription("What HN is saying about a topic this week — score, comment, frequency by day."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("pulse"),
+	)
+	s.AddTool(
+		mcplib.NewTool("my",
+			mcplib.WithDescription("Track a user's submissions with score buckets, traction rate, and best posting time hints."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("my"),
+	)
+	s.AddTool(
+		mcplib.NewTool("hiring_stats",
+			mcplib.WithDescription("Aggregate Who's Hiring across recent months: languages, remote ratio, top companies."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("hiring-stats"),
+	)
+	s.AddTool(
+		mcplib.NewTool("controversial",
+			mcplib.WithDescription("Find stories with the highest comment-to-point ratio — the polarizing discussions."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("controversial"),
+	)
+	s.AddTool(
+		mcplib.NewTool("repost",
+			mcplib.WithDescription("Has this URL been posted on HN before? Lists prior submissions with scores and dates."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("repost"),
+	)
+	s.AddTool(
+		mcplib.NewTool("velocity",
+			mcplib.WithDescription("Show a story's rank trajectory from local snapshots (climb, fall, stalled)."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("velocity"),
+	)
+	s.AddTool(
+		mcplib.NewTool("tldr",
+			mcplib.WithDescription("Deterministic thread digest: top authors by reply count, root vs reply ratio, comment heat metric."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("tldr"),
+	)
+	s.AddTool(
+		mcplib.NewTool("local_search",
+			mcplib.WithDescription("Offline FTS5 search across every story and comment you've touched."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("local-search"),
+	)
+	s.AddTool(
+		mcplib.NewTool("sync",
+			mcplib.WithDescription("Pull top/best/new lists into local SQLite for offline use and snapshot history."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("sync"),
+	)
+}
+
+// siblingCLIPath resolves the companion CLI via sibling-of-executable,
+// HACKERNEWS_CLI_PATH env var, then PATH.
+func siblingCLIPath() (string, error) {
+	const cliName = "hackernews-pp-cli"
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), cliName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	if v := os.Getenv("HACKERNEWS_CLI_PATH"); v != "" {
+		return v, nil
+	}
+	return exec.LookPath(cliName)
+}
+
+// shellOutToCLI returns an MCP tool handler that runs commandSpec against
+// the companion CLI. Resolves the binary path and pre-splits commandSpec
+// at registration so the per-call work is just user-arg split + exec.
+func shellOutToCLI(commandSpec string) server.ToolHandlerFunc {
+	cliPath, lookupErr := siblingCLIPath()
+	prefixArgs := splitShellArgs(commandSpec)
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		if lookupErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("companion CLI binary not found: %v\nTried sibling lookup, HACKERNEWS_CLI_PATH env var, and PATH.", lookupErr)), nil
+		}
+		userArgs, _ := req.GetArguments()["args"].(string)
+		finalArgs := append(append([]string{}, prefixArgs...), splitShellArgs(userArgs)...)
+		cmd := exec.CommandContext(ctx, cliPath, finalArgs...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return mcplib.NewToolResultError(string(out)), nil
+		}
+		return mcplib.NewToolResultText(string(out)), nil
+	}
+}
+
+// splitShellArgs whitespace-splits with double-quoted-token preservation.
+func splitShellArgs(s string) []string {
+	var tokens []string
+	var cur []rune
+	inQuote := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+		case (r == ' ' || r == '\t') && !inQuote:
+			if len(cur) > 0 {
+				tokens = append(tokens, string(cur))
+				cur = cur[:0]
+			}
+		default:
+			cur = append(cur, r)
+		}
+	}
+	if len(cur) > 0 {
+		tokens = append(tokens, string(cur))
+	}
+	return tokens
 }

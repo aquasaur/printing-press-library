@@ -1,0 +1,40 @@
+{
+  "manifest_version": "0.3",
+  "name": "cal-com-pp-mcp",
+  "display_name": "Cal.com",
+  "version": "2.3.9",
+  "description": "Every Cal.com feature, plus offline agendas, composed booking flows, and analytics no other Cal.com tool ships.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/cal-com-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/cal-com-pp-mcp",
+      "args": [],
+      "env": {
+        "CAL_COM_TOKEN": "${user_config.cal_com_token}"
+      }
+    }
+  },
+  "user_config": {
+    "cal_com_token": {
+      "type": "string",
+      "title": "CAL_COM_TOKEN",
+      "description": "Sets CAL_COM_TOKEN for the Cal.com MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "cal-com-pp-cli"
+}

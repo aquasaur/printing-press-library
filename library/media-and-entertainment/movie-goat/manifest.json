@@ -1,0 +1,40 @@
+{
+  "manifest_version": "0.3",
+  "name": "movie-goat-pp-mcp",
+  "display_name": "TMDb + OMDb",
+  "version": "1.3.2-0.20260411051745-33d1ba11eb8c+dirty",
+  "description": "Multi-source movie ratings (TMDb + OMDb), streaming availability, and cross-taste recommendations",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/movie-goat-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/movie-goat-pp-mcp",
+      "args": [],
+      "env": {
+        "TMDB_API_KEY": "${user_config.tmdb_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "tmdb_api_key": {
+      "type": "string",
+      "title": "TMDB_API_KEY",
+      "description": "Sets TMDB_API_KEY for the TMDb + OMDb MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "movie-goat-pp-cli"
+}

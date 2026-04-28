@@ -230,6 +230,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "Token-free Product Hunt CLI — browse today's featured launches, sync locally, and compose views the website itself...",
 		"archetype":   "generic",
 		"tool_count":  1,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion producthunt-pp-cli binary; the MCP cannot invoke them.",
 		"resources": []map[string]any{
 			{
 				"name":        "feed",
@@ -244,15 +245,15 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "First-seen trajectory", "command": "trend", "description": "See when a product first appeared in the Product Hunt feed and how many days it lingered there.", "rationale": "Product Hunt's own UI shows current day rank but hides historical presence; a local /feed snapshot store makes this..."},
-			{"name": "Launch-calendar", "command": "calendar", "description": "Week-at-a-glance showing which products were featured each day.", "rationale": "Requires multiple daily snapshots of the /feed joined by first-seen date; no single API call yields this."},
-			{"name": "Maker burn chart", "command": "makers", "description": "Top authors (makers or hunters) across all synced /feed snapshots in a time window.", "rationale": "Aggregates the Atom author field across every snapshot — a single /feed snapshot only surfaces that day's 50 authors."},
-			{"name": "Outbound-URL drift", "command": "outbound-diff", "description": "Detect products whose external landing URL changed between sync cycles.", "rationale": "Each /feed entry's canonical link hops through PH's /r/p/<id> redirect; comparing across snapshots surfaces..."},
-			{"name": "Tagline grep", "command": "tagline-grep", "description": "Regex/FTS search across every tagline the CLI has ever seen.", "rationale": "/feed taglines are dense, high-signal one-liners; an FTS-backed archive over time turns them into a semantic filter."},
-			{"name": "New-since-last-sync watcher", "command": "watch", "description": "Show only entries that appeared since the last sync. Idempotent; cron-friendly.", "rationale": "Requires the last snapshot to diff against; /feed alone can't tell you what's new to you."},
-			{"name": "Author-co-occurrence graph", "command": "authors related", "description": "Authors who repeatedly appear alongside a given author in the same /feed snapshots.", "rationale": "A rough social signal derived purely from the Atom author field across many snapshots."},
-			{"name": "Atom-first doctor", "command": "doctor", "description": "Probe /feed, parse the Atom XML, validate store schema, and surface exact failure modes.", "rationale": "This CLI's reachability story is unusual (only /feed works); the doctor has to explain the CF gate on HTML routes..."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "First-seen trajectory", "command": "trend", "description": "See when a product first appeared in the Product Hunt feed and how many days it lingered there.", "rationale": "Product Hunt's own UI shows current day rank but hides historical presence; a local /feed snapshot store makes this...", "via": "cli"},
+			{"name": "Launch-calendar", "command": "calendar", "description": "Week-at-a-glance showing which products were featured each day.", "rationale": "Requires multiple daily snapshots of the /feed joined by first-seen date; no single API call yields this.", "via": "cli"},
+			{"name": "Maker burn chart", "command": "makers", "description": "Top authors (makers or hunters) across all synced /feed snapshots in a time window.", "rationale": "Aggregates the Atom author field across every snapshot — a single /feed snapshot only surfaces that day's 50 authors.", "via": "cli"},
+			{"name": "Outbound-URL drift", "command": "outbound-diff", "description": "Detect products whose external landing URL changed between sync cycles.", "rationale": "Each /feed entry's canonical link hops through PH's /r/p/<id> redirect; comparing across snapshots surfaces...", "via": "cli"},
+			{"name": "Tagline grep", "command": "tagline-grep", "description": "Regex/FTS search across every tagline the CLI has ever seen.", "rationale": "/feed taglines are dense, high-signal one-liners; an FTS-backed archive over time turns them into a semantic filter.", "via": "cli"},
+			{"name": "New-since-last-sync watcher", "command": "watch", "description": "Show only entries that appeared since the last sync. Idempotent; cron-friendly.", "rationale": "Requires the last snapshot to diff against; /feed alone can't tell you what's new to you.", "via": "cli"},
+			{"name": "Author-co-occurrence graph", "command": "authors related", "description": "Authors who repeatedly appear alongside a given author in the same /feed snapshots.", "rationale": "A rough social signal derived purely from the Atom author field across many snapshots.", "via": "cli"},
+			{"name": "Atom-first doctor", "command": "doctor", "description": "Probe /feed, parse the Atom XML, validate store schema, and surface exact failure modes.", "rationale": "This CLI's reachability story is unusual (only /feed works); the doctor has to explain the CF gate on HTML routes...", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "First-seen trajectory", "insight": "Product Hunt's own UI shows current day rank but hides historical presence; a local /feed snapshot store makes this queryable."},
@@ -267,4 +268,9 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
 }

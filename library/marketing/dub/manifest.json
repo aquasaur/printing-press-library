@@ -1,0 +1,40 @@
+{
+  "manifest_version": "0.3",
+  "name": "dub-pp-mcp",
+  "display_name": "Dub",
+  "version": "2.3.9",
+  "description": "Manage Dub short links, analytics, partner programs, and conversion tracking from the terminal. Local SQLite store unlocks dead-link detection, performance drift, conversion funnels, partner leaderboards, and cross-tag analytics.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/dub-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/dub-pp-mcp",
+      "args": [],
+      "env": {
+        "DUB_TOKEN": "${user_config.dub_token}"
+      }
+    }
+  },
+  "user_config": {
+    "dub_token": {
+      "type": "string",
+      "title": "DUB_TOKEN",
+      "description": "Sets DUB_TOKEN for the Dub MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "dub-pp-cli"
+}

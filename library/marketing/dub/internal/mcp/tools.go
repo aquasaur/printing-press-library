@@ -18,6 +18,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/marketing/dub/internal/store"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"os/exec"
 )
 
 // RegisterTools registers all API operations as MCP tools.
@@ -812,6 +813,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "Dub is the modern link attribution platform for short links, conversion tracking, and affiliate programs.",
 		"archetype":   "payments",
 		"tool_count":  53,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion dub-pp-cli binary; the MCP cannot invoke them.",
 		"auth": map[string]any{
 			"type":     "bearer_token",
 			"env_vars": []string{"DUB_TOKEN"},
@@ -917,21 +919,21 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Dead-link detection", "command": "links stale", "description": "Find archived, expired, or zero-traffic links across the workspace before they pile up. Joins local link metadata...", "rationale": "Requires a local join across links and time-bucketed analytics that no /analytics endpoint returns in one call."},
-			{"name": "Performance drift detection", "command": "links drift", "description": "Detect links whose click rate dropped more than threshold percent week-over-week. Catches dying campaigns before...", "rationale": "Requires sequential analytics snapshots persisted locally — /analytics returns point-in-time, not deltas."},
-			{"name": "Duplicate destination finder", "command": "links duplicates", "description": "Find every link in the workspace pointing to the same destination URL. Surfaces accidental duplicates and...", "rationale": "Requires grouping every link's destination URL locally — the API returns links one at a time, not deduped."},
-			{"name": "Slug-collision lint", "command": "links lint", "description": "Audit short-key slugs for lookalike collisions, reserved-word violations, and brand-conflict hazards across domains.", "rationale": "Pure local-data analysis — no API endpoint to ask."},
-			{"name": "Bulk URL/UTM rewrite with diff", "command": "links rewrite", "description": "Show every link that would change and the exact patch BEFORE sending. Mass UTM or domain migrations with dry-run safety.", "rationale": "The API's bulk-update applies patches but doesn't preview. We diff locally first."},
-			{"name": "Tag-grouped campaign dashboard", "command": "campaigns", "description": "Performance dashboard aggregated by tag — clicks, leads, sales rolled up across every link wearing each tag.", "rationale": "Joins local taxonomy with cached analytics in one report — the API returns by-link, not by-tag-aggregate."},
-			{"name": "Conversion funnel attribution", "command": "funnel", "description": "Click-to-lead-to-sale conversion rates per link or campaign. Surfaces where prospects drop off in the funnel.", "rationale": "Joins local clicks, leads, and sales events on link_id and customer_id locally — the /track endpoints record each..."},
-			{"name": "Customer journey timeline", "command": "customers journey", "description": "See every link a customer clicked, when they became a lead, and when they purchased — in one timeline.", "rationale": "Requires a join across links, events, leads, and sales keyed on customer_id — the API doesn't expose this shape."},
-			{"name": "Partner leaderboard", "command": "partners leaderboard", "description": "Rank partners by commission earned, conversion rate, and clicks generated. Find your top performers and dormant...", "rationale": "Joins partners × commissions × clicks locally — the API returns by-resource, not as a ranked aggregate."},
-			{"name": "Commission audit reconciliation", "command": "partners audit-commissions", "description": "Reconcile partners, commissions, bounties, and payouts to flag stale rates, missing payouts, and expired bounties...", "rationale": "Requires a join shape only available from the local store across four resources."},
-			{"name": "Domain usage report", "command": "domains report", "description": "Per-domain link count and click distribution. Surfaces over- and under-used custom domains.", "rationale": "Aggregates link counts per domain locally — the API returns links and domains as separate flat lists."},
-			{"name": "Workspace health doctor", "command": "health", "description": "Cross-resource Monday-morning report: rate-limit headroom, expired-but-active links, dead destination URLs,...", "rationale": "Aggregates state across links, domains, tags, and rate-limit headers — no single endpoint."},
-			{"name": "Time-windowed change feed", "command": "since", "description": "What happened in the last N hours? Created, updated, deleted links plus partner approvals and top-clicked entities.", "rationale": "Requires local timestamps on every record. The API returns by-resource, not by-time."},
-			{"name": "Live event tail", "command": "tail", "description": "Stream live changes by polling the API at regular intervals. Watch new clicks, leads, and sales as they happen.", "rationale": "Real-time monitoring loop — different from `since` which looks backward at history."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Dead-link detection", "command": "links stale", "description": "Find archived, expired, or zero-traffic links across the workspace before they pile up. Joins local link metadata...", "rationale": "Requires a local join across links and time-bucketed analytics that no /analytics endpoint returns in one call.", "via": "cli"},
+			{"name": "Performance drift detection", "command": "links drift", "description": "Detect links whose click rate dropped more than threshold percent week-over-week. Catches dying campaigns before...", "rationale": "Requires sequential analytics snapshots persisted locally — /analytics returns point-in-time, not deltas.", "via": "cli"},
+			{"name": "Duplicate destination finder", "command": "links duplicates", "description": "Find every link in the workspace pointing to the same destination URL. Surfaces accidental duplicates and...", "rationale": "Requires grouping every link's destination URL locally — the API returns links one at a time, not deduped.", "via": "cli"},
+			{"name": "Slug-collision lint", "command": "links lint", "description": "Audit short-key slugs for lookalike collisions, reserved-word violations, and brand-conflict hazards across domains.", "rationale": "Pure local-data analysis — no API endpoint to ask.", "via": "cli"},
+			{"name": "Bulk URL/UTM rewrite with diff", "command": "links rewrite", "description": "Show every link that would change and the exact patch BEFORE sending. Mass UTM or domain migrations with dry-run safety.", "rationale": "The API's bulk-update applies patches but doesn't preview. We diff locally first.", "via": "cli"},
+			{"name": "Tag-grouped campaign dashboard", "command": "campaigns", "description": "Performance dashboard aggregated by tag — clicks, leads, sales rolled up across every link wearing each tag.", "rationale": "Joins local taxonomy with cached analytics in one report — the API returns by-link, not by-tag-aggregate.", "via": "cli"},
+			{"name": "Conversion funnel attribution", "command": "funnel", "description": "Click-to-lead-to-sale conversion rates per link or campaign. Surfaces where prospects drop off in the funnel.", "rationale": "Joins local clicks, leads, and sales events on link_id and customer_id locally — the /track endpoints record each...", "via": "cli"},
+			{"name": "Customer journey timeline", "command": "customers journey", "description": "See every link a customer clicked, when they became a lead, and when they purchased — in one timeline.", "rationale": "Requires a join across links, events, leads, and sales keyed on customer_id — the API doesn't expose this shape.", "via": "cli"},
+			{"name": "Partner leaderboard", "command": "partners leaderboard", "description": "Rank partners by commission earned, conversion rate, and clicks generated. Find your top performers and dormant...", "rationale": "Joins partners × commissions × clicks locally — the API returns by-resource, not as a ranked aggregate.", "via": "cli"},
+			{"name": "Commission audit reconciliation", "command": "partners audit-commissions", "description": "Reconcile partners, commissions, bounties, and payouts to flag stale rates, missing payouts, and expired bounties...", "rationale": "Requires a join shape only available from the local store across four resources.", "via": "cli"},
+			{"name": "Domain usage report", "command": "domains report", "description": "Per-domain link count and click distribution. Surfaces over- and under-used custom domains.", "rationale": "Aggregates link counts per domain locally — the API returns links and domains as separate flat lists.", "via": "cli"},
+			{"name": "Workspace health doctor", "command": "health", "description": "Cross-resource Monday-morning report: rate-limit headroom, expired-but-active links, dead destination URLs,...", "rationale": "Aggregates state across links, domains, tags, and rate-limit headers — no single endpoint.", "via": "cli"},
+			{"name": "Time-windowed change feed", "command": "since", "description": "What happened in the last N hours? Created, updated, deleted links plus partner approvals and top-clicked entities.", "rationale": "Requires local timestamps on every record. The API returns by-resource, not by-time.", "via": "cli"},
+			{"name": "Live event tail", "command": "tail", "description": "Stream live changes by polling the API at regular intervals. Watch new clicks, leads, and sales as they happen.", "rationale": "Real-time monitoring loop — different from `since` which looks backward at history.", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Dead-link detection", "insight": "Requires a local join across links and time-bucketed analytics that no /analytics endpoint returns in one call."},
@@ -954,4 +956,168 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
+	s.AddTool(
+		mcplib.NewTool("links_stale",
+			mcplib.WithDescription("Find archived, expired, or zero-traffic links across the workspace before they pile up. Joins local link metadata with analytics aggregates the API doesn't expose together."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("links stale"),
+	)
+	s.AddTool(
+		mcplib.NewTool("links_drift",
+			mcplib.WithDescription("Detect links whose click rate dropped more than threshold percent week-over-week. Catches dying campaigns before reporting deadlines."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("links drift"),
+	)
+	s.AddTool(
+		mcplib.NewTool("links_duplicates",
+			mcplib.WithDescription("Find every link in the workspace pointing to the same destination URL. Surfaces accidental duplicates and consolidation candidates."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("links duplicates"),
+	)
+	s.AddTool(
+		mcplib.NewTool("links_lint",
+			mcplib.WithDescription("Audit short-key slugs for lookalike collisions, reserved-word violations, and brand-conflict hazards across domains."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("links lint"),
+	)
+	s.AddTool(
+		mcplib.NewTool("links_rewrite",
+			mcplib.WithDescription("Show every link that would change and the exact patch BEFORE sending. Mass UTM or domain migrations with dry-run safety."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("links rewrite"),
+	)
+	s.AddTool(
+		mcplib.NewTool("campaigns",
+			mcplib.WithDescription("Performance dashboard aggregated by tag — clicks, leads, sales rolled up across every link wearing each tag."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("campaigns"),
+	)
+	s.AddTool(
+		mcplib.NewTool("funnel",
+			mcplib.WithDescription("Click-to-lead-to-sale conversion rates per link or campaign. Surfaces where prospects drop off in the funnel."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("funnel"),
+	)
+	s.AddTool(
+		mcplib.NewTool("customers_journey",
+			mcplib.WithDescription("See every link a customer clicked, when they became a lead, and when they purchased — in one timeline."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("customers journey"),
+	)
+	s.AddTool(
+		mcplib.NewTool("partners_leaderboard",
+			mcplib.WithDescription("Rank partners by commission earned, conversion rate, and clicks generated. Find your top performers and dormant partners."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("partners leaderboard"),
+	)
+	s.AddTool(
+		mcplib.NewTool("partners_audit_commissions",
+			mcplib.WithDescription("Reconcile partners, commissions, bounties, and payouts to flag stale rates, missing payouts, and expired bounties still earning."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("partners audit-commissions"),
+	)
+	s.AddTool(
+		mcplib.NewTool("domains_report",
+			mcplib.WithDescription("Per-domain link count and click distribution. Surfaces over- and under-used custom domains."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("domains report"),
+	)
+	s.AddTool(
+		mcplib.NewTool("health",
+			mcplib.WithDescription("Cross-resource Monday-morning report: rate-limit headroom, expired-but-active links, dead destination URLs, unverified domains, dormant tags."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("health"),
+	)
+	s.AddTool(
+		mcplib.NewTool("since",
+			mcplib.WithDescription("What happened in the last N hours? Created, updated, deleted links plus partner approvals and top-clicked entities."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("since"),
+	)
+	s.AddTool(
+		mcplib.NewTool("tail",
+			mcplib.WithDescription("Stream live changes by polling the API at regular intervals. Watch new clicks, leads, and sales as they happen."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("tail"),
+	)
+}
+
+// siblingCLIPath resolves the companion CLI via sibling-of-executable,
+// DUB_CLI_PATH env var, then PATH.
+func siblingCLIPath() (string, error) {
+	const cliName = "dub-pp-cli"
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), cliName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	if v := os.Getenv("DUB_CLI_PATH"); v != "" {
+		return v, nil
+	}
+	return exec.LookPath(cliName)
+}
+
+// shellOutToCLI returns an MCP tool handler that runs commandSpec against
+// the companion CLI. Resolves the binary path and pre-splits commandSpec
+// at registration so the per-call work is just user-arg split + exec.
+func shellOutToCLI(commandSpec string) server.ToolHandlerFunc {
+	cliPath, lookupErr := siblingCLIPath()
+	prefixArgs := splitShellArgs(commandSpec)
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		if lookupErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("companion CLI binary not found: %v\nTried sibling lookup, DUB_CLI_PATH env var, and PATH.", lookupErr)), nil
+		}
+		userArgs, _ := req.GetArguments()["args"].(string)
+		finalArgs := append(append([]string{}, prefixArgs...), splitShellArgs(userArgs)...)
+		cmd := exec.CommandContext(ctx, cliPath, finalArgs...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return mcplib.NewToolResultError(string(out)), nil
+		}
+		return mcplib.NewToolResultText(string(out)), nil
+	}
+}
+
+// splitShellArgs whitespace-splits with double-quoted-token preservation.
+func splitShellArgs(s string) []string {
+	var tokens []string
+	var cur []rune
+	inQuote := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+		case (r == ' ' || r == '\t') && !inQuote:
+			if len(cur) > 0 {
+				tokens = append(tokens, string(cur))
+				cur = cur[:0]
+			}
+		default:
+			cur = append(cur, r)
+		}
+	}
+	if len(cur) > 0 {
+		tokens = append(tokens, string(cur))
+	}
+	return tokens
 }

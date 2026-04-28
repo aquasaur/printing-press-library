@@ -281,8 +281,9 @@ func handleAbout(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToolR
 		"api":               "espn",
 		"description":       "ESPN Sports API CLI — scores, standings, news, and game data across 17 sports and 139 leagues",
 		"tool_count":        7,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion espn-pp-cli binary; the MCP cannot invoke them.",
 		"public_tool_count": 0,
-		"unique_capabilities": []map[string]string{
+		"cli_only_capabilities": []map[string]string{
 			{"name": "Cross-Sport Dashboard", "command": "today", "description": "See all live games across NFL, NBA, MLB, and NHL in one command"},
 			{"name": "Full-Text Game Search", "command": "search", "description": "Search your game history by team name, matchup, or venue instantly"},
 			{"name": "SQL Query Interface", "command": "sql", "description": "Run arbitrary SQL queries against your local sports database"},
@@ -292,4 +293,9 @@ func handleAbout(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToolR
 	}
 	data, _ := json.MarshalIndent(about, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
 }

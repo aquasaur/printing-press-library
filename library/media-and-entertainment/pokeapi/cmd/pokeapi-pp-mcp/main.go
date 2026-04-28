@@ -13,12 +13,13 @@ import (
 
 func main() {
 	s := server.NewMCPServer(
-		"pokeapi-pp-mcp",
+		"pokeapi",
 		"1.0.0",
 		server.WithToolCapabilities(false),
 	)
 
 	mcptools.RegisterTools(s)
+	mcptools.RegisterNovelFeatureTools(s)
 
 	if err := server.ServeStdio(s); err != nil {
 		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)

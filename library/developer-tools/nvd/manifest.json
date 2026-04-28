@@ -1,0 +1,28 @@
+{
+  "manifest_version": "0.3",
+  "name": "nvd-pp-mcp",
+  "display_name": "Nvd",
+  "version": "2.3.7",
+  "description": "Nvd API surface as MCP tools.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/nvd-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/nvd-pp-mcp",
+      "args": []
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "nvd-pp-cli"
+}

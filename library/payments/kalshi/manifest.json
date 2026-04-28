@@ -1,0 +1,40 @@
+{
+  "manifest_version": "0.3",
+  "name": "kalshi-pp-mcp",
+  "display_name": "Kalshi",
+  "version": "1.2.2-0.20260411023050-cbcd67dbddd8+dirty",
+  "description": "Trade prediction markets, track portfolios, and analyze odds on Kalshi from the command line",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/kalshi-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/kalshi-pp-mcp",
+      "args": [],
+      "env": {
+        "KALSHI_API_KEY": "${user_config.kalshi_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "kalshi_api_key": {
+      "type": "string",
+      "title": "KALSHI_API_KEY",
+      "description": "Sets KALSHI_API_KEY for the Kalshi MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "kalshi-pp-cli"
+}

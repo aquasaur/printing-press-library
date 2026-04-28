@@ -1047,6 +1047,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "Manually defined OpenAPI spec for endpoints being migrated to spec-first approach",
 		"archetype":   "project-management",
 		"tool_count":  89,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion kalshi-pp-cli binary; the MCP cannot invoke them.",
 		"auth": map[string]any{
 			"type":     "api_key",
 			"env_vars": []string{"KALSHI_TRADE_MANUAL_KALSHI_ACCESS_KEY"},
@@ -1168,15 +1169,15 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Portfolio Attribution", "command": "portfolio attribution", "description": "See your P&L broken down by market category and series over any time period", "rationale": "Requires joining fills, settlements, events, and series data that only exists together in the local store"},
-			{"name": "Odds History Tracker", "command": "markets history", "description": "Track how market odds moved over time with price progression charts", "rationale": "Requires periodic price snapshots stored locally across syncs — no existing tool persists historical prices"},
-			{"name": "Win Rate Analytics", "command": "portfolio winrate", "description": "Calculate your win/loss ratio, expected value, and ROI across all settled positions", "rationale": "Requires correlating fills with settlement outcomes across your entire trading history in the local store"},
-			{"name": "Settlement Calendar", "command": "portfolio calendar", "description": "See upcoming settlements with your positions, expected payouts, and category breakdown", "rationale": "Requires joining positions with event expiry data and market metadata that only coexist in the local store"},
-			{"name": "Market Movers", "command": "markets movers", "description": "Find markets with the biggest price swings since your last sync", "rationale": "Requires prior price snapshots to compute deltas — impossible without persistent local data"},
-			{"name": "Cross-Market Correlation", "command": "markets correlate", "description": "Compare price histories of two markets to discover correlated events", "rationale": "Requires historical price series for multiple markets stored locally for statistical comparison"},
-			{"name": "Exposure Analysis", "command": "portfolio exposure", "description": "See your total risk broken down by category, with concentration warnings", "rationale": "Requires joining positions with market metadata and category data for portfolio-level risk assessment"},
-			{"name": "Stale Position Finder", "command": "portfolio stale", "description": "Find positions in markets approaching expiry where you haven't acted recently", "rationale": "Requires joining local position data with market expiry dates to flag forgotten positions"},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Portfolio Attribution", "command": "portfolio attribution", "description": "See your P&L broken down by market category and series over any time period", "rationale": "Requires joining fills, settlements, events, and series data that only exists together in the local store", "via": "cli"},
+			{"name": "Odds History Tracker", "command": "markets history", "description": "Track how market odds moved over time with price progression charts", "rationale": "Requires periodic price snapshots stored locally across syncs — no existing tool persists historical prices", "via": "cli"},
+			{"name": "Win Rate Analytics", "command": "portfolio winrate", "description": "Calculate your win/loss ratio, expected value, and ROI across all settled positions", "rationale": "Requires correlating fills with settlement outcomes across your entire trading history in the local store", "via": "cli"},
+			{"name": "Settlement Calendar", "command": "portfolio calendar", "description": "See upcoming settlements with your positions, expected payouts, and category breakdown", "rationale": "Requires joining positions with event expiry data and market metadata that only coexist in the local store", "via": "cli"},
+			{"name": "Market Movers", "command": "markets movers", "description": "Find markets with the biggest price swings since your last sync", "rationale": "Requires prior price snapshots to compute deltas — impossible without persistent local data", "via": "cli"},
+			{"name": "Cross-Market Correlation", "command": "markets correlate", "description": "Compare price histories of two markets to discover correlated events", "rationale": "Requires historical price series for multiple markets stored locally for statistical comparison", "via": "cli"},
+			{"name": "Exposure Analysis", "command": "portfolio exposure", "description": "See your total risk broken down by category, with concentration warnings", "rationale": "Requires joining positions with market metadata and category data for portfolio-level risk assessment", "via": "cli"},
+			{"name": "Stale Position Finder", "command": "portfolio stale", "description": "Find positions in markets approaching expiry where you haven't acted recently", "rationale": "Requires joining local position data with market expiry dates to flag forgotten positions", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Portfolio Attribution", "insight": "Requires joining fills, settlements, events, and series data that only exists together in the local store"},
@@ -1194,4 +1195,9 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
 }

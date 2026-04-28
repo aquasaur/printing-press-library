@@ -17,6 +17,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/media-and-entertainment/pokeapi/internal/client"
 	"github.com/mvanhorn/printing-press-library/library/media-and-entertainment/pokeapi/internal/config"
 	"github.com/mvanhorn/printing-press-library/library/media-and-entertainment/pokeapi/internal/store"
+	"os/exec"
 )
 
 // RegisterTools registers all API operations as MCP tools.
@@ -1033,6 +1034,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "All the Pokémon data you'll ever need in one place, easily accessible through a modern free open-source RESTful...",
 		"archetype":   "generic",
 		"tool_count":  97,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion pokeapi-pp-cli binary; the MCP cannot invoke them.",
 		"resources": []map[string]any{
 			{
 				"name": "ability",
@@ -1377,12 +1379,12 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Pokemon profile", "command": "pokemon profile", "description": "Build an agent-ready Pokemon profile by combining core pokemon data, species metadata, type names, abilities, stats,...", "rationale": "A single profile command saves agents from stitching together the most common PokeAPI resources by hand."},
-			{"name": "Pokemon evolution path", "command": "pokemon evolution", "description": "Resolve a Pokemon's species and evolution chain into a readable evolution path.", "rationale": "Evolution requires traversing species to an evolution-chain URL and then recursively flattening chain links."},
-			{"name": "Pokemon matchups", "command": "pokemon matchups", "description": "Summarize type weaknesses, resistances, immunities, and offensive coverage for a Pokemon.", "rationale": "Type matchup analysis requires loading each type relation and combining damage multipliers."},
-			{"name": "Pokemon moves", "command": "pokemon moves", "description": "List and filter a Pokemon's moves by learn method, version group, and level learned.", "rationale": "The raw pokemon endpoint nests move version details; agents need a flattened move list."},
-			{"name": "Team coverage", "command": "team coverage", "description": "Analyze a comma-separated Pokemon team for shared weaknesses, resistances, immunities, and offensive type coverage.", "rationale": "Team analysis compounds individual type relations into a roster-level view, which raw endpoints do not provide."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Pokemon profile", "command": "pokemon profile", "description": "Build an agent-ready Pokemon profile by combining core pokemon data, species metadata, type names, abilities, stats,...", "rationale": "A single profile command saves agents from stitching together the most common PokeAPI resources by hand.", "via": "cli"},
+			{"name": "Pokemon evolution path", "command": "pokemon evolution", "description": "Resolve a Pokemon's species and evolution chain into a readable evolution path.", "rationale": "Evolution requires traversing species to an evolution-chain URL and then recursively flattening chain links.", "via": "cli"},
+			{"name": "Pokemon matchups", "command": "pokemon matchups", "description": "Summarize type weaknesses, resistances, immunities, and offensive coverage for a Pokemon.", "rationale": "Type matchup analysis requires loading each type relation and combining damage multipliers.", "via": "cli"},
+			{"name": "Pokemon moves", "command": "pokemon moves", "description": "List and filter a Pokemon's moves by learn method, version group, and level learned.", "rationale": "The raw pokemon endpoint nests move version details; agents need a flattened move list.", "via": "cli"},
+			{"name": "Team coverage", "command": "team coverage", "description": "Analyze a comma-separated Pokemon team for shared weaknesses, resistances, immunities, and offensive type coverage.", "rationale": "Team analysis compounds individual type relations into a roster-level view, which raw endpoints do not provide.", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Pokemon profile", "insight": "A single profile command saves agents from stitching together the most common PokeAPI resources by hand."},
@@ -1394,4 +1396,105 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
+	s.AddTool(
+		mcplib.NewTool("pokemon_profile",
+			mcplib.WithDescription("Build an agent-ready Pokemon profile by combining core pokemon data, species metadata, type names, abilities, stats, and move counts."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("pokemon profile"),
+	)
+	s.AddTool(
+		mcplib.NewTool("pokemon_evolution",
+			mcplib.WithDescription("Resolve a Pokemon's species and evolution chain into a readable evolution path."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("pokemon evolution"),
+	)
+	s.AddTool(
+		mcplib.NewTool("pokemon_matchups",
+			mcplib.WithDescription("Summarize type weaknesses, resistances, immunities, and offensive coverage for a Pokemon."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("pokemon matchups"),
+	)
+	s.AddTool(
+		mcplib.NewTool("pokemon_moves",
+			mcplib.WithDescription("List and filter a Pokemon's moves by learn method, version group, and level learned."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("pokemon moves"),
+	)
+	s.AddTool(
+		mcplib.NewTool("team_coverage",
+			mcplib.WithDescription("Analyze a comma-separated Pokemon team for shared weaknesses, resistances, immunities, and offensive type coverage."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("team coverage"),
+	)
+}
+
+// siblingCLIPath resolves the companion CLI via sibling-of-executable,
+// POKEAPI_CLI_PATH env var, then PATH.
+func siblingCLIPath() (string, error) {
+	const cliName = "pokeapi-pp-cli"
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), cliName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	if v := os.Getenv("POKEAPI_CLI_PATH"); v != "" {
+		return v, nil
+	}
+	return exec.LookPath(cliName)
+}
+
+// shellOutToCLI returns an MCP tool handler that runs commandSpec against
+// the companion CLI. Resolves the binary path and pre-splits commandSpec
+// at registration so the per-call work is just user-arg split + exec.
+func shellOutToCLI(commandSpec string) server.ToolHandlerFunc {
+	cliPath, lookupErr := siblingCLIPath()
+	prefixArgs := splitShellArgs(commandSpec)
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		if lookupErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("companion CLI binary not found: %v\nTried sibling lookup, POKEAPI_CLI_PATH env var, and PATH.", lookupErr)), nil
+		}
+		userArgs, _ := req.GetArguments()["args"].(string)
+		finalArgs := append(append([]string{}, prefixArgs...), splitShellArgs(userArgs)...)
+		cmd := exec.CommandContext(ctx, cliPath, finalArgs...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return mcplib.NewToolResultError(string(out)), nil
+		}
+		return mcplib.NewToolResultText(string(out)), nil
+	}
+}
+
+// splitShellArgs whitespace-splits with double-quoted-token preservation.
+func splitShellArgs(s string) []string {
+	var tokens []string
+	var cur []rune
+	inQuote := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+		case (r == ' ' || r == '\t') && !inQuote:
+			if len(cur) > 0 {
+				tokens = append(tokens, string(cur))
+				cur = cur[:0]
+			}
+		default:
+			cur = append(cur, r)
+		}
+	}
+	if len(cur) > 0 {
+		tokens = append(tokens, string(cur))
+	}
+	return tokens
 }

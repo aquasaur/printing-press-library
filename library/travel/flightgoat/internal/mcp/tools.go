@@ -831,12 +831,13 @@ func handleAbout(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToolR
 		"api":               "flightgoat",
 		"description":       "# Introduction AeroAPI is a simple, query-based API that gives software developers access to a variety of...",
 		"tool_count":        58,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion flightgoat-pp-cli binary; the MCP cannot invoke them.",
 		"public_tool_count": 0,
 		"auth": map[string]any{
 			"type":     "api_key",
 			"env_vars": []string{"FLIGHTGOAT_API_KEY_AUTH"},
 		},
-		"unique_capabilities": []map[string]string{
+		"cli_only_capabilities": []map[string]string{
 			{"name": "Longhaul nonstop finder", "command": "longhaul", "description": "List every nonstop destination from an airport with flights of at least N hours, optionally scoped to a month."},
 			{"name": "Route explore", "command": "explore", "description": "List every nonstop destination from an airport with typical duration, operating airlines, and frequency. A Kayak..."},
 			{"name": "Cheapest longhaul dates", "command": "cheapest-longhaul", "description": "Find the cheapest days to fly the longest nonstop routes from an airport over a date range."},
@@ -850,4 +851,9 @@ func handleAbout(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToolR
 	}
 	data, _ := json.MarshalIndent(about, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
 }

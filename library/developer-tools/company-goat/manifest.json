@@ -1,0 +1,28 @@
+{
+  "manifest_version": "0.3",
+  "name": "company-goat-pp-mcp",
+  "display_name": "Company GOAT",
+  "version": "2.3.9",
+  "description": "Multi-source company research for small and midsize startups, with SEC Form D fundraising data hidden behind paid Crunchbase tiers.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/company-goat-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/company-goat-pp-mcp",
+      "args": []
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "company-goat-pp-cli"
+}

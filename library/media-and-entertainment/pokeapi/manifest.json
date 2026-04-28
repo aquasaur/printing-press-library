@@ -1,0 +1,28 @@
+{
+  "manifest_version": "0.3",
+  "name": "pokeapi-pp-mcp",
+  "display_name": "pokeapi",
+  "version": "2.3.6",
+  "description": "PokeAPI as an agent-ready Pokemon knowledge graph with endpoint coverage plus profile, evolution, matchup, moves, and team coverage workflows.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/pokeapi-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/pokeapi-pp-mcp",
+      "args": []
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "pokeapi-pp-cli"
+}

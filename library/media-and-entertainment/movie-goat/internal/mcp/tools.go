@@ -514,6 +514,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "The movie goat CLI — search, discover, and track movies and TV shows using TMDb and OMDb",
 		"archetype":   "generic",
 		"tool_count":  25,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion movie-goat-pp-cli binary; the MCP cannot invoke them.",
 		"auth": map[string]any{
 			"type":     "bearer_token",
 			"env_vars": []string{"TMDB_API_KEY"},
@@ -575,13 +576,13 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Multi-Source Ratings Dashboard", "command": "get", "description": "See TMDb, IMDb, Rotten Tomatoes, and Metacritic ratings for any movie in one view", "rationale": "Requires combining TMDb API details with OMDb enrichment — no single API provides all four rating sources"},
-			{"name": "Where to Watch", "command": "watch", "description": "Find every streaming platform, rental option, and purchase option for any movie or show", "rationale": "TMDb provides watch provider data that no existing CLI surfaces in a usable format"},
-			{"name": "Career Timeline", "command": "career", "description": "Explore any actor or director's complete filmography with ratings and career trajectory", "rationale": "Requires combining person credits with per-title details across TMDb + OMDb ratings"},
-			{"name": "Tonight Picker", "command": "tonight", "description": "Get a smart recommendation for what to watch tonight based on trending and your streaming services", "rationale": "Combines trending data, discover filters, and watch provider availability in a single decision flow"},
-			{"name": "Head-to-Head Compare", "command": "versus", "description": "Compare two movies or shows side-by-side across every metric: ratings, cast, box office, streaming", "rationale": "No single API call compares titles — requires fetching and aligning details from both TMDb and OMDb"},
-			{"name": "Marathon Planner", "command": "marathon", "description": "Plan a franchise movie marathon with watch order, total runtime, and suggested breaks", "rationale": "Requires fetching TMDb collection data and computing cumulative runtime across all entries"},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Multi-Source Ratings Dashboard", "command": "get", "description": "See TMDb, IMDb, Rotten Tomatoes, and Metacritic ratings for any movie in one view", "rationale": "Requires combining TMDb API details with OMDb enrichment — no single API provides all four rating sources", "via": "cli"},
+			{"name": "Where to Watch", "command": "watch", "description": "Find every streaming platform, rental option, and purchase option for any movie or show", "rationale": "TMDb provides watch provider data that no existing CLI surfaces in a usable format", "via": "cli"},
+			{"name": "Career Timeline", "command": "career", "description": "Explore any actor or director's complete filmography with ratings and career trajectory", "rationale": "Requires combining person credits with per-title details across TMDb + OMDb ratings", "via": "cli"},
+			{"name": "Tonight Picker", "command": "tonight", "description": "Get a smart recommendation for what to watch tonight based on trending and your streaming services", "rationale": "Combines trending data, discover filters, and watch provider availability in a single decision flow", "via": "cli"},
+			{"name": "Head-to-Head Compare", "command": "versus", "description": "Compare two movies or shows side-by-side across every metric: ratings, cast, box office, streaming", "rationale": "No single API call compares titles — requires fetching and aligning details from both TMDb and OMDb", "via": "cli"},
+			{"name": "Marathon Planner", "command": "marathon", "description": "Plan a franchise movie marathon with watch order, total runtime, and suggested breaks", "rationale": "Requires fetching TMDb collection data and computing cumulative runtime across all entries", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Multi-Source Ratings Dashboard", "insight": "Requires combining TMDb API details with OMDb enrichment — no single API provides all four rating sources"},
@@ -594,4 +595,9 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
 }

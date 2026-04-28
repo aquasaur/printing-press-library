@@ -1,0 +1,40 @@
+{
+  "manifest_version": "0.3",
+  "name": "recipe-goat-pp-mcp",
+  "display_name": "Recipe GOAT",
+  "version": "2.3.6",
+  "description": "Find the best version of any recipe across 37 trusted sites \u2014 trust-aware ranking weights real reader signal at 80% and editorial trust at 15% (curated chef/baker sites win tie-break over crowdsourced aggregators). Builds a local SQLite cookbook with pantry match, meal plans, cook log, substitutions, and USDA-backed nutrition backfill. Powered by Surf-Chrome HTTP transport \u2014 bypasses TLS-fingerprint bot detection that previously blocked Dotdash properties.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/recipe-goat-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/recipe-goat-pp-mcp",
+      "args": [],
+      "env": {
+        "USDA_FDC_API_KEY": "${user_config.usda_fdc_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "usda_fdc_api_key": {
+      "type": "string",
+      "title": "USDA_FDC_API_KEY",
+      "description": "Sets USDA_FDC_API_KEY for the Recipe Goat MCP server.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "recipe-goat-pp-cli"
+}

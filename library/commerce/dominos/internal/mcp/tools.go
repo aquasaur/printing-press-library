@@ -18,6 +18,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/commerce/dominos/internal/store"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"os/exec"
 )
 
 // looksLikeAuthError checks if an error message body contains auth-related keywords.
@@ -386,6 +387,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "Domino's Pizza CLI - order pizza, browse menus, track orders, and manage rewards from the terminal",
 		"archetype":   "generic",
 		"tool_count":  19,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion dominos-pp-cli binary; the MCP cannot invoke them.",
 		"auth": map[string]any{
 			"type":     "api_key",
 			"env_vars": []string{"DOMINOS_TOKEN"},
@@ -435,17 +437,17 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Cross-store price comparison", "command": "compare-prices", "description": "Compare item pricing across every nearby store and find the cheapest one for your order.", "rationale": "Requires syncing menu and pricing data from multiple stores into a local SQLite database, then joining against a..."},
-			{"name": "Named order templates", "command": "template save", "description": "Save a complete order (store, address, items, toppings, payment) as a named template and replay it with one command.", "rationale": "SQLite-stored named templates that survive across sessions. apizza has cart persistence but no named templates;..."},
-			{"name": "Deal optimizer", "command": "deals best", "description": "Cross-references the cart against every available deal (including loyalty-exclusive) to find the cheapest combination.", "rationale": "Domino's CheckDraftDeal endpoint only validates one deal at a time. Optimizing across N deals requires running each..."},
-			{"name": "Menu diff", "command": "menu diff", "description": "Compare the current menu against the last-synced snapshot to surface new items, removed items, and price changes.", "rationale": "Requires preserving a historical menu snapshot in SQLite. Domino's API only returns current state."},
-			{"name": "Spending analytics", "command": "analytics", "description": "Aggregate order history into spending trends, favorite items, order frequency, and average order value over a chosen...", "rationale": "Order history endpoints are auth-gated and only return raw data. SQLite-backed aggregation produces analytics no..."},
-			{"name": "Live delivery tracker with polling", "command": "tracking --watch", "description": "Polls the tracker endpoint at a chosen interval and streams status updates: prep → bake → quality check → out...", "rationale": "node-dominos exposes a single tracker call. A watch loop with structured status transitions and an exit-on-delivered..."},
-			{"name": "Smart reorder with substitution", "command": "reorder", "description": "Replay your last order against today's menu, automatically substituting unavailable items with the closest match...", "rationale": "Requires both order history and the full current menu in the local store. Existing wrappers have neither."},
-			{"name": "Nutrition calculator", "command": "nutrition", "description": "Sum calories, protein, fat, and carbs across all items in a cart using the menu's embedded nutrition data.", "rationale": "Domino's menu includes nutrition data per item. Aggregating across a cart requires local persistence; no existing..."},
-			{"name": "Bulk order builder", "command": "order-bulk", "description": "Read a CSV of multi-person orders, find the optimal store for the group, and submit each individual order.", "rationale": "No existing tool supports multi-order batch. Useful for office lunches and parties where one coordinator is buying..."},
-			{"name": "Store health score", "command": "stores health", "description": "Composite store health score combining wait times, hours, service capabilities, and historical delivery performance.", "rationale": "CartEtaMinutes + store profile + capability flags need to be joined into a single rating. No tool does this."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Cross-store price comparison", "command": "compare-prices", "description": "Compare item pricing across every nearby store and find the cheapest one for your order.", "rationale": "Requires syncing menu and pricing data from multiple stores into a local SQLite database, then joining against a...", "via": "cli"},
+			{"name": "Named order templates", "command": "template save", "description": "Save a complete order (store, address, items, toppings, payment) as a named template and replay it with one command.", "rationale": "SQLite-stored named templates that survive across sessions. apizza has cart persistence but no named templates;...", "via": "cli"},
+			{"name": "Deal optimizer", "command": "deals best", "description": "Cross-references the cart against every available deal (including loyalty-exclusive) to find the cheapest combination.", "rationale": "Domino's CheckDraftDeal endpoint only validates one deal at a time. Optimizing across N deals requires running each...", "via": "cli"},
+			{"name": "Menu diff", "command": "menu diff", "description": "Compare the current menu against the last-synced snapshot to surface new items, removed items, and price changes.", "rationale": "Requires preserving a historical menu snapshot in SQLite. Domino's API only returns current state.", "via": "cli"},
+			{"name": "Spending analytics", "command": "analytics", "description": "Aggregate order history into spending trends, favorite items, order frequency, and average order value over a chosen...", "rationale": "Order history endpoints are auth-gated and only return raw data. SQLite-backed aggregation produces analytics no...", "via": "cli"},
+			{"name": "Live delivery tracker with polling", "command": "tracking --watch", "description": "Polls the tracker endpoint at a chosen interval and streams status updates: prep → bake → quality check → out...", "rationale": "node-dominos exposes a single tracker call. A watch loop with structured status transitions and an exit-on-delivered...", "via": "cli"},
+			{"name": "Smart reorder with substitution", "command": "reorder", "description": "Replay your last order against today's menu, automatically substituting unavailable items with the closest match...", "rationale": "Requires both order history and the full current menu in the local store. Existing wrappers have neither.", "via": "cli"},
+			{"name": "Nutrition calculator", "command": "nutrition", "description": "Sum calories, protein, fat, and carbs across all items in a cart using the menu's embedded nutrition data.", "rationale": "Domino's menu includes nutrition data per item. Aggregating across a cart requires local persistence; no existing...", "via": "cli"},
+			{"name": "Bulk order builder", "command": "order-bulk", "description": "Read a CSV of multi-person orders, find the optimal store for the group, and submit each individual order.", "rationale": "No existing tool supports multi-order batch. Useful for office lunches and parties where one coordinator is buying...", "via": "cli"},
+			{"name": "Store health score", "command": "stores health", "description": "Composite store health score combining wait times, hours, service capabilities, and historical delivery performance.", "rationale": "CartEtaMinutes + store profile + capability flags need to be joined into a single rating. No tool does this.", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Cross-store price comparison", "insight": "Requires syncing menu and pricing data from multiple stores into a local SQLite database, then joining against a candidate cart. Community wrappers only query one store at a time."},
@@ -462,4 +464,140 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
+	s.AddTool(
+		mcplib.NewTool("compare_prices",
+			mcplib.WithDescription("Compare item pricing across every nearby store and find the cheapest one for your order."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("compare-prices"),
+	)
+	s.AddTool(
+		mcplib.NewTool("template_save",
+			mcplib.WithDescription("Save a complete order (store, address, items, toppings, payment) as a named template and replay it with one command."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("template save"),
+	)
+	s.AddTool(
+		mcplib.NewTool("deals_best",
+			mcplib.WithDescription("Cross-references the cart against every available deal (including loyalty-exclusive) to find the cheapest combination."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("deals best"),
+	)
+	s.AddTool(
+		mcplib.NewTool("menu_diff",
+			mcplib.WithDescription("Compare the current menu against the last-synced snapshot to surface new items, removed items, and price changes."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("menu diff"),
+	)
+	s.AddTool(
+		mcplib.NewTool("analytics",
+			mcplib.WithDescription("Aggregate order history into spending trends, favorite items, order frequency, and average order value over a chosen window."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("analytics"),
+	)
+	s.AddTool(
+		mcplib.NewTool("tracking_watch",
+			mcplib.WithDescription("Polls the tracker endpoint at a chosen interval and streams status updates: prep → bake → quality check → out for delivery."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("tracking --watch"),
+	)
+	s.AddTool(
+		mcplib.NewTool("reorder",
+			mcplib.WithDescription("Replay your last order against today's menu, automatically substituting unavailable items with the closest match using FTS similarity."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("reorder"),
+	)
+	s.AddTool(
+		mcplib.NewTool("nutrition",
+			mcplib.WithDescription("Sum calories, protein, fat, and carbs across all items in a cart using the menu's embedded nutrition data."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("nutrition"),
+	)
+	s.AddTool(
+		mcplib.NewTool("order_bulk",
+			mcplib.WithDescription("Read a CSV of multi-person orders, find the optimal store for the group, and submit each individual order."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("order-bulk"),
+	)
+	s.AddTool(
+		mcplib.NewTool("stores_health",
+			mcplib.WithDescription("Composite store health score combining wait times, hours, service capabilities, and historical delivery performance."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("stores health"),
+	)
+}
+
+// siblingCLIPath resolves the companion CLI via sibling-of-executable,
+// DOMINOS_CLI_PATH env var, then PATH.
+func siblingCLIPath() (string, error) {
+	const cliName = "dominos-pp-cli"
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), cliName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	if v := os.Getenv("DOMINOS_CLI_PATH"); v != "" {
+		return v, nil
+	}
+	return exec.LookPath(cliName)
+}
+
+// shellOutToCLI returns an MCP tool handler that runs commandSpec against
+// the companion CLI. Resolves the binary path and pre-splits commandSpec
+// at registration so the per-call work is just user-arg split + exec.
+func shellOutToCLI(commandSpec string) server.ToolHandlerFunc {
+	cliPath, lookupErr := siblingCLIPath()
+	prefixArgs := splitShellArgs(commandSpec)
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		if lookupErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("companion CLI binary not found: %v\nTried sibling lookup, DOMINOS_CLI_PATH env var, and PATH.", lookupErr)), nil
+		}
+		userArgs, _ := req.GetArguments()["args"].(string)
+		finalArgs := append(append([]string{}, prefixArgs...), splitShellArgs(userArgs)...)
+		cmd := exec.CommandContext(ctx, cliPath, finalArgs...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return mcplib.NewToolResultError(string(out)), nil
+		}
+		return mcplib.NewToolResultText(string(out)), nil
+	}
+}
+
+// splitShellArgs whitespace-splits with double-quoted-token preservation.
+func splitShellArgs(s string) []string {
+	var tokens []string
+	var cur []rune
+	inQuote := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+		case (r == ' ' || r == '\t') && !inQuote:
+			if len(cur) > 0 {
+				tokens = append(tokens, string(cur))
+				cur = cur[:0]
+			}
+		default:
+			cur = append(cur, r)
+		}
+	}
+	if len(cur) > 0 {
+		tokens = append(tokens, string(cur))
+	}
+	return tokens
 }

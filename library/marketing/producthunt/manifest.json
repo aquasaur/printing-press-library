@@ -1,0 +1,28 @@
+{
+  "manifest_version": "0.3",
+  "name": "producthunt-pp-mcp",
+  "display_name": "Product Hunt",
+  "version": "1.3.3-0.20260423064016-d4eed9e4b078",
+  "description": "Token-free Product Hunt CLI \u2014 browse today's featured launches, sync locally, and compose views the website itself doesn't expose.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/producthunt-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/producthunt-pp-mcp",
+      "args": []
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "producthunt-pp-cli"
+}

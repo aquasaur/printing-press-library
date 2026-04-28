@@ -1,0 +1,28 @@
+{
+  "manifest_version": "0.3",
+  "name": "allrecipes-pp-mcp",
+  "display_name": "Allrecipes",
+  "version": "2.3.9",
+  "description": "Allrecipes Pocket \u2014 every Allrecipes recipe in your terminal: cached as data, with pantry-aware search, Bayesian-smoothed ranking, multi-recipe grocery lists, and clean markdown export.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/allrecipes-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/allrecipes-pp-mcp",
+      "args": []
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "allrecipes-pp-cli"
+}

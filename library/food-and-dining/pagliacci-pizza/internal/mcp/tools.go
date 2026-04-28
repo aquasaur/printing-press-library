@@ -18,6 +18,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/food-and-dining/pagliacci-pizza/internal/client"
 	"github.com/mvanhorn/printing-press-library/library/food-and-dining/pagliacci-pizza/internal/config"
 	"github.com/mvanhorn/printing-press-library/library/food-and-dining/pagliacci-pizza/internal/store"
+	"os/exec"
 )
 
 // looksLikeAuthError checks if an error message body contains auth-related keywords.
@@ -639,6 +640,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "CLI for the Pagliacci Pizza ordering API. Browse stores, menus, and available slices; manage your cart, place...",
 		"archetype":   "crm",
 		"tool_count":  57,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion pagliacci-pizza-pp-cli binary; the MCP cannot invoke them.",
 		"auth": map[string]any{
 			"type": "composed",
 		},
@@ -722,13 +724,13 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Today's slices across all stores", "command": "slices today", "description": "See which Pagliacci slices are available right now at every Seattle store, sorted by proximity to your saved address.", "rationale": "Requires syncing MenuSlices for all 8+ stores into the local store and joining by location. Pagliacci's web UI shows..."},
-			{"name": "Open store tonight", "command": "store tonight", "description": "List stores that are still open and can deliver to your saved address right now, sorted by ETA.", "rationale": "Requires real-time TimeWindowDays + Store.OpenHour + delivery-zone resolution. Pagliacci's UI lists all stores..."},
-			{"name": "Stack discounts to maximize savings", "command": "rewards stack", "description": "Compute the best application of stored coupons, reward redemption, and account credit for a given order total....", "rationale": "Requires joining StoredCoupons + RewardCard + StoredCredit and applying optimal-application logic. The site applies..."},
-			{"name": "Reorder last (or by ID)", "command": "orders reorder", "description": "Re-create a past order as a fresh cart, with price revalidation since prices change. Add --send to also submit.", "rationale": "Composes OrderListItem + OrderClone + OrderPrice. The site has a one-click reorder but exposes no batch mode."},
-			{"name": "Address-aware delivery time picker", "command": "address best-time", "description": "Resolve a saved address label to the next available delivery slot in one call.", "rationale": "Joins AddressName + AddressInfo zone resolution + TimeWindows lookup."},
-			{"name": "Spend summary", "command": "orders summary", "description": "Aggregate order spend over a time range, with top items and store breakdown.", "rationale": "Aggregates OrderListItem locally. The site lets you browse history one order at a time."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Today's slices across all stores", "command": "slices today", "description": "See which Pagliacci slices are available right now at every Seattle store, sorted by proximity to your saved address.", "rationale": "Requires syncing MenuSlices for all 8+ stores into the local store and joining by location. Pagliacci's web UI shows...", "via": "cli"},
+			{"name": "Open store tonight", "command": "store tonight", "description": "List stores that are still open and can deliver to your saved address right now, sorted by ETA.", "rationale": "Requires real-time TimeWindowDays + Store.OpenHour + delivery-zone resolution. Pagliacci's UI lists all stores...", "via": "cli"},
+			{"name": "Stack discounts to maximize savings", "command": "rewards stack", "description": "Compute the best application of stored coupons, reward redemption, and account credit for a given order total....", "rationale": "Requires joining StoredCoupons + RewardCard + StoredCredit and applying optimal-application logic. The site applies...", "via": "cli"},
+			{"name": "Reorder last (or by ID)", "command": "orders reorder", "description": "Re-create a past order as a fresh cart, with price revalidation since prices change. Add --send to also submit.", "rationale": "Composes OrderListItem + OrderClone + OrderPrice. The site has a one-click reorder but exposes no batch mode.", "via": "cli"},
+			{"name": "Address-aware delivery time picker", "command": "address best-time", "description": "Resolve a saved address label to the next available delivery slot in one call.", "rationale": "Joins AddressName + AddressInfo zone resolution + TimeWindows lookup.", "via": "cli"},
+			{"name": "Spend summary", "command": "orders summary", "description": "Aggregate order spend over a time range, with top items and store breakdown.", "rationale": "Aggregates OrderListItem locally. The site lets you browse history one order at a time.", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Today's slices across all stores", "insight": "Requires syncing MenuSlices for all 8+ stores into the local store and joining by location. Pagliacci's web UI shows slices one store at a time."},
@@ -743,4 +745,112 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
+	s.AddTool(
+		mcplib.NewTool("slices_today",
+			mcplib.WithDescription("See which Pagliacci slices are available right now at every Seattle store, sorted by proximity to your saved address."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("slices today"),
+	)
+	s.AddTool(
+		mcplib.NewTool("store_tonight",
+			mcplib.WithDescription("List stores that are still open and can deliver to your saved address right now, sorted by ETA."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("store tonight"),
+	)
+	s.AddTool(
+		mcplib.NewTool("rewards_stack",
+			mcplib.WithDescription("Compute the best application of stored coupons, reward redemption, and account credit for a given order total. Defaults to single-best-coupon + credit; multi-coupon stacking is flagged --experimental."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("rewards stack"),
+	)
+	s.AddTool(
+		mcplib.NewTool("orders_reorder",
+			mcplib.WithDescription("Re-create a past order as a fresh cart, with price revalidation since prices change. Add --send to also submit."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("orders reorder"),
+	)
+	s.AddTool(
+		mcplib.NewTool("address_best_time",
+			mcplib.WithDescription("Resolve a saved address label to the next available delivery slot in one call."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("address best-time"),
+	)
+	s.AddTool(
+		mcplib.NewTool("orders_summary",
+			mcplib.WithDescription("Aggregate order spend over a time range, with top items and store breakdown."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("orders summary"),
+	)
+}
+
+// siblingCLIPath resolves the companion CLI via sibling-of-executable,
+// PAGLIACCI_PIZZA_CLI_PATH env var, then PATH.
+func siblingCLIPath() (string, error) {
+	const cliName = "pagliacci-pizza-pp-cli"
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), cliName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	if v := os.Getenv("PAGLIACCI_PIZZA_CLI_PATH"); v != "" {
+		return v, nil
+	}
+	return exec.LookPath(cliName)
+}
+
+// shellOutToCLI returns an MCP tool handler that runs commandSpec against
+// the companion CLI. Resolves the binary path and pre-splits commandSpec
+// at registration so the per-call work is just user-arg split + exec.
+func shellOutToCLI(commandSpec string) server.ToolHandlerFunc {
+	cliPath, lookupErr := siblingCLIPath()
+	prefixArgs := splitShellArgs(commandSpec)
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		if lookupErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("companion CLI binary not found: %v\nTried sibling lookup, PAGLIACCI_PIZZA_CLI_PATH env var, and PATH.", lookupErr)), nil
+		}
+		userArgs, _ := req.GetArguments()["args"].(string)
+		finalArgs := append(append([]string{}, prefixArgs...), splitShellArgs(userArgs)...)
+		cmd := exec.CommandContext(ctx, cliPath, finalArgs...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return mcplib.NewToolResultError(string(out)), nil
+		}
+		return mcplib.NewToolResultText(string(out)), nil
+	}
+}
+
+// splitShellArgs whitespace-splits with double-quoted-token preservation.
+func splitShellArgs(s string) []string {
+	var tokens []string
+	var cur []rune
+	inQuote := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+		case (r == ' ' || r == '\t') && !inQuote:
+			if len(cur) > 0 {
+				tokens = append(tokens, string(cur))
+				cur = cur[:0]
+			}
+		default:
+			cur = append(cur, r)
+		}
+	}
+	if len(cur) > 0 {
+		tokens = append(tokens, string(cur))
+	}
+	return tokens
 }

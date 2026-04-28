@@ -1,0 +1,28 @@
+{
+  "manifest_version": "0.3",
+  "name": "food52-pp-mcp",
+  "display_name": "Food52",
+  "version": "2.3.10-0.20260427083629-6b2be74d017b+dirty",
+  "description": "Search, browse, and read Food52 from your terminal \u2014 with offline FTS, pantry matching, recipe scaling, and the editorial signals other tools throw away.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/food52-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/food52-pp-mcp",
+      "args": []
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  },
+  "cli_binary": "food52-pp-cli"
+}

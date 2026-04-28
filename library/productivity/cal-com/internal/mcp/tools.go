@@ -18,6 +18,7 @@ import (
 	"github.com/mvanhorn/printing-press-library/library/productivity/cal-com/internal/store"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"os/exec"
 )
 
 // RegisterTools registers all API operations as MCP tools.
@@ -2730,6 +2731,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "Cal.com v2 API — scheduling infrastructure. Authenticate with a Bearer token (API key from Settings > Developer >...",
 		"archetype":   "generic",
 		"tool_count":  285,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion cal-com-pp-cli binary; the MCP cannot invoke them.",
 		"auth": map[string]any{
 			"type":     "bearer_token",
 			"env_vars": []string{"CAL_COM_TOKEN"},
@@ -2866,19 +2868,19 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "One-shot booking", "command": "book", "description": "Find a slot and book it in a single command — no slot/reserve/create/confirm chain.", "rationale": "Composes four API calls (slots available → reserve → create → confirm) into one safe operation with --dry-run...."},
-			{"name": "Today's agenda", "command": "today", "description": "Today's bookings with status, attendees, and meeting links — read from the local store, no API call needed.", "rationale": "Joins bookings, event types, and attendee data locally. The API has no agenda endpoint; without a store you must..."},
-			{"name": "Week view", "command": "week", "description": "7-day calendar view of upcoming bookings, with conflict highlighting and per-day rollup counts.", "rationale": "Rendered from the local store; conflict detection cross-references external calendar busy times."},
-			{"name": "Cross-event-type slot search", "command": "slots find", "description": "Find first available slot across multiple event types in one call, ranked by start time.", "rationale": "Cal.com's /slots endpoint takes a single event-type ID. We fan out, merge, and dedup so the agent can ask 'which of..."},
-			{"name": "Booking analytics", "command": "analytics", "description": "Booking volume, density, no-show rate, and cancellation rate across a window, grouped by event type / attendee /...", "rationale": "The API has no analytics endpoints. The local store enables aggregations that no individual API call exposes...."},
-			{"name": "Conflict detection", "command": "conflicts", "description": "Detects overlaps between active Cal.com bookings and external calendar busy-times.", "rationale": "Joining bookings (Cal.com) with calendar busy-times (external) requires data from two sources held together. The..."},
-			{"name": "Availability gap finder", "command": "gaps", "description": "Finds open windows in your schedule that are available but unbooked, filtered by minimum block size.", "rationale": "Correlates schedule availability with booking history in the local store. The API has no analogous filter."},
-			{"name": "Team workload balance", "command": "workload", "description": "Booking distribution across team members over a window — surfaces overloaded vs underutilized hosts.", "rationale": "Joins bookings against team membership locally. The API has no team-workload endpoint."},
-			{"name": "Webhook coverage", "command": "webhooks coverage", "description": "Audits registered webhook triggers against the canonical set and reports lifecycle events with no subscriber.", "rationale": "Comparison of registered vs canonical triggers requires both a static catalog and the registered list. No vendor..."},
-			{"name": "Stale event types", "command": "event-types stale", "description": "Event types with zero bookings in the last N days — candidates for removal.", "rationale": "Cross-references local bookings against the local event-type list. The API offers no analogous filter."},
-			{"name": "Pending review", "command": "bookings pending", "description": "Pending-confirmation bookings sorted by age, with default 24h max-age cutoff.", "rationale": "API only filters by status; we add age-aware sort and `--max-age` so agents can prioritize the oldest pending first."},
-			{"name": "Webhook trigger catalog", "command": "webhooks triggers", "description": "Static reference of every valid Cal.com webhook trigger constant, grouped by lifecycle stage.", "rationale": "Cal.com publishes triggers in docs but no API endpoint enumerates them. Curated reference shipped in-CLI saves..."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "One-shot booking", "command": "book", "description": "Find a slot and book it in a single command — no slot/reserve/create/confirm chain.", "rationale": "Composes four API calls (slots available → reserve → create → confirm) into one safe operation with --dry-run....", "via": "cli"},
+			{"name": "Today's agenda", "command": "today", "description": "Today's bookings with status, attendees, and meeting links — read from the local store, no API call needed.", "rationale": "Joins bookings, event types, and attendee data locally. The API has no agenda endpoint; without a store you must...", "via": "cli"},
+			{"name": "Week view", "command": "week", "description": "7-day calendar view of upcoming bookings, with conflict highlighting and per-day rollup counts.", "rationale": "Rendered from the local store; conflict detection cross-references external calendar busy times.", "via": "cli"},
+			{"name": "Cross-event-type slot search", "command": "slots find", "description": "Find first available slot across multiple event types in one call, ranked by start time.", "rationale": "Cal.com's /slots endpoint takes a single event-type ID. We fan out, merge, and dedup so the agent can ask 'which of...", "via": "cli"},
+			{"name": "Booking analytics", "command": "analytics", "description": "Booking volume, density, no-show rate, and cancellation rate across a window, grouped by event type / attendee /...", "rationale": "The API has no analytics endpoints. The local store enables aggregations that no individual API call exposes....", "via": "cli"},
+			{"name": "Conflict detection", "command": "conflicts", "description": "Detects overlaps between active Cal.com bookings and external calendar busy-times.", "rationale": "Joining bookings (Cal.com) with calendar busy-times (external) requires data from two sources held together. The...", "via": "cli"},
+			{"name": "Availability gap finder", "command": "gaps", "description": "Finds open windows in your schedule that are available but unbooked, filtered by minimum block size.", "rationale": "Correlates schedule availability with booking history in the local store. The API has no analogous filter.", "via": "cli"},
+			{"name": "Team workload balance", "command": "workload", "description": "Booking distribution across team members over a window — surfaces overloaded vs underutilized hosts.", "rationale": "Joins bookings against team membership locally. The API has no team-workload endpoint.", "via": "cli"},
+			{"name": "Webhook coverage", "command": "webhooks coverage", "description": "Audits registered webhook triggers against the canonical set and reports lifecycle events with no subscriber.", "rationale": "Comparison of registered vs canonical triggers requires both a static catalog and the registered list. No vendor...", "via": "cli"},
+			{"name": "Stale event types", "command": "event-types stale", "description": "Event types with zero bookings in the last N days — candidates for removal.", "rationale": "Cross-references local bookings against the local event-type list. The API offers no analogous filter.", "via": "cli"},
+			{"name": "Pending review", "command": "bookings pending", "description": "Pending-confirmation bookings sorted by age, with default 24h max-age cutoff.", "rationale": "API only filters by status; we add age-aware sort and `--max-age` so agents can prioritize the oldest pending first.", "via": "cli"},
+			{"name": "Webhook trigger catalog", "command": "webhooks triggers", "description": "Static reference of every valid Cal.com webhook trigger constant, grouped by lifecycle stage.", "rationale": "Cal.com publishes triggers in docs but no API endpoint enumerates them. Curated reference shipped in-CLI saves...", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "One-shot booking", "insight": "Composes four API calls (slots available → reserve → create → confirm) into one safe operation with --dry-run. Every existing Cal.com tool exposes raw endpoint mirrors and forces the agent to chain them."},
@@ -2897,4 +2899,154 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
+	s.AddTool(
+		mcplib.NewTool("book",
+			mcplib.WithDescription("Find a slot and book it in a single command — no slot/reserve/create/confirm chain."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("book"),
+	)
+	s.AddTool(
+		mcplib.NewTool("today",
+			mcplib.WithDescription("Today's bookings with status, attendees, and meeting links — read from the local store, no API call needed."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("today"),
+	)
+	s.AddTool(
+		mcplib.NewTool("week",
+			mcplib.WithDescription("7-day calendar view of upcoming bookings, with conflict highlighting and per-day rollup counts."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("week"),
+	)
+	s.AddTool(
+		mcplib.NewTool("slots_find",
+			mcplib.WithDescription("Find first available slot across multiple event types in one call, ranked by start time."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("slots find"),
+	)
+	s.AddTool(
+		mcplib.NewTool("analytics",
+			mcplib.WithDescription("Booking volume, density, no-show rate, and cancellation rate across a window, grouped by event type / attendee / weekday / hour."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("analytics"),
+	)
+	s.AddTool(
+		mcplib.NewTool("conflicts",
+			mcplib.WithDescription("Detects overlaps between active Cal.com bookings and external calendar busy-times."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("conflicts"),
+	)
+	s.AddTool(
+		mcplib.NewTool("gaps",
+			mcplib.WithDescription("Finds open windows in your schedule that are available but unbooked, filtered by minimum block size."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("gaps"),
+	)
+	s.AddTool(
+		mcplib.NewTool("workload",
+			mcplib.WithDescription("Booking distribution across team members over a window — surfaces overloaded vs underutilized hosts."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("workload"),
+	)
+	s.AddTool(
+		mcplib.NewTool("webhooks_coverage",
+			mcplib.WithDescription("Audits registered webhook triggers against the canonical set and reports lifecycle events with no subscriber."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("webhooks coverage"),
+	)
+	s.AddTool(
+		mcplib.NewTool("event_types_stale",
+			mcplib.WithDescription("Event types with zero bookings in the last N days — candidates for removal."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("event-types stale"),
+	)
+	s.AddTool(
+		mcplib.NewTool("bookings_pending",
+			mcplib.WithDescription("Pending-confirmation bookings sorted by age, with default 24h max-age cutoff."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("bookings pending"),
+	)
+	s.AddTool(
+		mcplib.NewTool("webhooks_triggers",
+			mcplib.WithDescription("Static reference of every valid Cal.com webhook trigger constant, grouped by lifecycle stage."),
+			mcplib.WithString("args", mcplib.Description("Arguments to pass to the CLI command (e.g. \"--domain stripe.com --json\"). Empty string for no args.")),
+		),
+		shellOutToCLI("webhooks triggers"),
+	)
+}
+
+// siblingCLIPath resolves the companion CLI via sibling-of-executable,
+// CAL_COM_CLI_PATH env var, then PATH.
+func siblingCLIPath() (string, error) {
+	const cliName = "cal-com-pp-cli"
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), cliName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	if v := os.Getenv("CAL_COM_CLI_PATH"); v != "" {
+		return v, nil
+	}
+	return exec.LookPath(cliName)
+}
+
+// shellOutToCLI returns an MCP tool handler that runs commandSpec against
+// the companion CLI. Resolves the binary path and pre-splits commandSpec
+// at registration so the per-call work is just user-arg split + exec.
+func shellOutToCLI(commandSpec string) server.ToolHandlerFunc {
+	cliPath, lookupErr := siblingCLIPath()
+	prefixArgs := splitShellArgs(commandSpec)
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		if lookupErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("companion CLI binary not found: %v\nTried sibling lookup, CAL_COM_CLI_PATH env var, and PATH.", lookupErr)), nil
+		}
+		userArgs, _ := req.GetArguments()["args"].(string)
+		finalArgs := append(append([]string{}, prefixArgs...), splitShellArgs(userArgs)...)
+		cmd := exec.CommandContext(ctx, cliPath, finalArgs...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return mcplib.NewToolResultError(string(out)), nil
+		}
+		return mcplib.NewToolResultText(string(out)), nil
+	}
+}
+
+// splitShellArgs whitespace-splits with double-quoted-token preservation.
+func splitShellArgs(s string) []string {
+	var tokens []string
+	var cur []rune
+	inQuote := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+		case (r == ' ' || r == '\t') && !inQuote:
+			if len(cur) > 0 {
+				tokens = append(tokens, string(cur))
+				cur = cur[:0]
+			}
+		default:
+			cur = append(cur, r)
+		}
+	}
+	if len(cur) > 0 {
+		tokens = append(tokens, string(cur))
+	}
+	return tokens
 }

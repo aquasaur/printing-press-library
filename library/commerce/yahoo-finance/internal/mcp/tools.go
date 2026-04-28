@@ -351,6 +351,7 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 		"description": "Yahoo Finance CLI — market data, quotes, fundamentals, options, news",
 		"archetype":   "generic",
 		"tool_count":  11,
+		"tool_surface": "MCP exposes the endpoints listed under `resources` (plus sync/search/sql/context utilities when present). Items under `cli_only_capabilities` require running the companion yahoo-finance-pp-cli binary; the MCP cannot invoke them.",
 		"resources": []map[string]any{
 			{
 				"name":        "autocomplete",
@@ -420,14 +421,14 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 			"Use the search tool for full-text search across all synced resources. Faster than iterating list endpoints.",
 			"Prefer sql/search over repeated API calls when the data is already synced.",
 		},
-		"unique_capabilities": []map[string]string{
-			{"name": "Portfolio performance tracker", "command": "portfolio perf", "description": "Show current market value, cost basis, and unrealized P&L across local lots joined with live quotes.", "rationale": "Requires combining user-owned cost-basis state with Yahoo quote data; the remote API alone cannot do that."},
-			{"name": "Morning digest across watchlist", "command": "digest --watchlist tech", "description": "One command surfaces the biggest gainers and losers across a saved watchlist.", "rationale": "Aggregates live quote data across locally named watchlists; no single Yahoo endpoint returns that personalized view."},
-			{"name": "Side-by-side quote comparison", "command": "compare AAPL MSFT NVDA", "description": "Compare price, change, 52-week range, and market cap across multiple symbols.", "rationale": "Parallel multi-symbol comparison with normalized output is a CLI workflow, not a native Yahoo endpoint."},
-			{"name": "Options moneyness filter", "command": "options-chain AAPL --moneyness otm --max-dte 45", "description": "Filter an options chain to ATM/OTM/ITM contracts within a days-to-expiration window.", "rationale": "Yahoo's options endpoint returns a full chain; computing moneyness against current spot price requires local processing."},
-			{"name": "Local SQL over synced data", "command": "sql \"SELECT symbol, COUNT(*) FROM watchlist_members GROUP BY symbol\"", "description": "Run ad-hoc analysis directly against the local SQLite database.", "rationale": "Lets users analyze synced data and local state with arbitrary queries that Yahoo's API does not support."},
-			{"name": "FX converter", "command": "fx USD EUR --amount 100", "description": "Convert currencies from Yahoo FX pairs in one line.", "rationale": "Builds a fast currency-conversion workflow on top of quote data without making users compose the raw pair symbol themselves."},
-			{"name": "Chrome cookie import fallback", "command": "auth login-chrome", "description": "Import your live Chrome session cookies when Yahoo's crumb handshake is blocked from your IP.", "rationale": "Works around residential/cloud IP rate limits that kill raw API access. No other Yahoo Finance tool offers this fallback."},
+		"cli_only_capabilities": []map[string]string{
+			{"name": "Portfolio performance tracker", "command": "portfolio perf", "description": "Show current market value, cost basis, and unrealized P&L across local lots joined with live quotes.", "rationale": "Requires combining user-owned cost-basis state with Yahoo quote data; the remote API alone cannot do that.", "via": "cli"},
+			{"name": "Morning digest across watchlist", "command": "digest --watchlist tech", "description": "One command surfaces the biggest gainers and losers across a saved watchlist.", "rationale": "Aggregates live quote data across locally named watchlists; no single Yahoo endpoint returns that personalized view.", "via": "cli"},
+			{"name": "Side-by-side quote comparison", "command": "compare AAPL MSFT NVDA", "description": "Compare price, change, 52-week range, and market cap across multiple symbols.", "rationale": "Parallel multi-symbol comparison with normalized output is a CLI workflow, not a native Yahoo endpoint.", "via": "cli"},
+			{"name": "Options moneyness filter", "command": "options-chain AAPL --moneyness otm --max-dte 45", "description": "Filter an options chain to ATM/OTM/ITM contracts within a days-to-expiration window.", "rationale": "Yahoo's options endpoint returns a full chain; computing moneyness against current spot price requires local processing.", "via": "cli"},
+			{"name": "Local SQL over synced data", "command": "sql \"SELECT symbol, COUNT(*) FROM watchlist_members GROUP BY symbol\"", "description": "Run ad-hoc analysis directly against the local SQLite database.", "rationale": "Lets users analyze synced data and local state with arbitrary queries that Yahoo's API does not support.", "via": "cli"},
+			{"name": "FX converter", "command": "fx USD EUR --amount 100", "description": "Convert currencies from Yahoo FX pairs in one line.", "rationale": "Builds a fast currency-conversion workflow on top of quote data without making users compose the raw pair symbol themselves.", "via": "cli"},
+			{"name": "Chrome cookie import fallback", "command": "auth login-chrome", "description": "Import your live Chrome session cookies when Yahoo's crumb handshake is blocked from your IP.", "rationale": "Works around residential/cloud IP rate limits that kill raw API access. No other Yahoo Finance tool offers this fallback.", "via": "cli"},
 		},
 		"playbook": []map[string]string{
 			{"topic": "Portfolio performance tracker", "insight": "Requires joining local cost-basis state with live quotes; the cost basis only exists on the user's machine."},
@@ -441,4 +442,9 @@ func handleContext(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToo
 	}
 	data, _ := json.MarshalIndent(ctx, "", "  ")
 	return mcplib.NewToolResultText(string(data)), nil
+}
+
+// RegisterNovelFeatureTools registers MCP tools that shell out to the
+// companion CLI binary. Empty body when the spec has no novel features.
+func RegisterNovelFeatureTools(s *server.MCPServer) {
 }
