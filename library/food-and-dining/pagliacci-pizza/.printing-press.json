@@ -10,7 +10,7 @@
   "run_id": "20260425-235234",
   "mcp_binary": "pagliacci-pp-mcp",
   "mcp_tool_count": 57,
-  "mcp_ready": "cli-only",
+  "mcp_ready": "partial",
   "auth_type": "composed",
   "novel_features": [
     {
@@ -43,5 +43,6 @@
       "command": "orders summary",
       "description": "Aggregate order spend over a time range, with top items and store breakdown."
     }
-  ]
+  ],
+  "mcp_public_tool_count": 19
 }
