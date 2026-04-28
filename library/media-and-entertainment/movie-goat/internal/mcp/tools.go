@@ -194,7 +194,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("timeWindow", mcplib.Required(), mcplib.Description("Time window: day or week")),
 			mcplib.WithString("page", mcplib.Description("Page number")),
 		),
-		makeAPIHandler("GET", "/trending/all/{timeWindow}", []string{}),
+		makeAPIHandler("GET", "/trending/all/{timeWindow}", []string{"timeWindow"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("trending_movies",
@@ -202,14 +202,14 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("timeWindow", mcplib.Required(), mcplib.Description("Time window: day or week")),
 			mcplib.WithString("page", mcplib.Description("Page number")),
 		),
-		makeAPIHandler("GET", "/trending/movie/{timeWindow}", []string{}),
+		makeAPIHandler("GET", "/trending/movie/{timeWindow}", []string{"timeWindow"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("trending_people",
 			mcplib.WithDescription("Get trending people Returns array of Person."),
 			mcplib.WithString("timeWindow", mcplib.Required(), mcplib.Description("Time window: day or week")),
 		),
-		makeAPIHandler("GET", "/trending/person/{timeWindow}", []string{}),
+		makeAPIHandler("GET", "/trending/person/{timeWindow}", []string{"timeWindow"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("trending_tv",
@@ -217,7 +217,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("timeWindow", mcplib.Required(), mcplib.Description("Time window: day or week")),
 			mcplib.WithString("page", mcplib.Description("Page number")),
 		),
-		makeAPIHandler("GET", "/trending/tv/{timeWindow}", []string{}),
+		makeAPIHandler("GET", "/trending/tv/{timeWindow}", []string{"timeWindow"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("tv_airing-today",

@@ -58,7 +58,7 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("account_confirm_email",
 			mcplib.WithDescription("Confirm a new account by clicking the email-confirmation link's token"),
 		),
-		makeAPIHandler("GET", "/ConfirmEmail/{token}", []string{}),
+		makeAPIHandler("GET", "/ConfirmEmail/{token}", []string{"token"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("account_create_token",
@@ -106,19 +106,19 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("address_delete",
 			mcplib.WithDescription("Delete a saved address Destructive operation."),
 		),
-		makeAPIHandler("DELETE", "/AddressName/{id}", []string{}),
+		makeAPIHandler("DELETE", "/AddressName/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("address_get",
 			mcplib.WithDescription("Get a saved address by ID"),
 		),
-		makeAPIHandler("GET", "/AddressName/{id}", []string{}),
+		makeAPIHandler("GET", "/AddressName/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("address_get_info",
 			mcplib.WithDescription("Get address info by saved ID"),
 		),
-		makeAPIHandler("GET", "/AddressInfo/{id}", []string{}),
+		makeAPIHandler("GET", "/AddressInfo/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("address_list",
@@ -136,7 +136,7 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("cart_get_quote_building",
 			mcplib.WithDescription("Get the current cart/quote-building state by building ID"),
 		),
-		makeAPIHandler("GET", "/QuoteBuilding/{buildingId}", []string{}),
+		makeAPIHandler("GET", "/QuoteBuilding/{buildingId}", []string{"buildingId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("cart_price_order",
@@ -154,19 +154,19 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("cart_update_quote_building",
 			mcplib.WithDescription("Update cart contents (add/remove/modify items)"),
 		),
-		makeAPIHandler("POST", "/QuoteBuilding/{buildingId}", []string{}),
+		makeAPIHandler("POST", "/QuoteBuilding/{buildingId}", []string{"buildingId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("credit_delete",
 			mcplib.WithDescription("Remove an account credit entry Destructive operation."),
 		),
-		makeAPIHandler("DELETE", "/StoredCredit/{id}", []string{}),
+		makeAPIHandler("DELETE", "/StoredCredit/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("credit_get",
 			mcplib.WithDescription("Get a single credit entry"),
 		),
-		makeAPIHandler("GET", "/StoredCredit/{id}", []string{}),
+		makeAPIHandler("GET", "/StoredCredit/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("credit_list",
@@ -178,7 +178,7 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("customer_access_devices_delete",
 			mcplib.WithDescription("Revoke a device's access to the account Destructive operation."),
 		),
-		makeAPIHandler("DELETE", "/AccessDevice/{deviceId}", []string{}),
+		makeAPIHandler("DELETE", "/AccessDevice/{deviceId}", []string{"deviceId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("customer_access_devices_list",
@@ -190,7 +190,7 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("customer_get",
 			mcplib.WithDescription("Get customer profile by ID"),
 		),
-		makeAPIHandler("GET", "/Customer/{customerId}", []string{}),
+		makeAPIHandler("GET", "/Customer/{customerId}", []string{"customerId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("customer_migrate_answer",
@@ -208,7 +208,7 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("customer_feedback_get",
 			mcplib.WithDescription("Get a feedback submission by ID"),
 		),
-		makeAPIHandler("GET", "/Feedback/{id}", []string{}),
+		makeAPIHandler("GET", "/Feedback/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("customer_feedback_submit",
@@ -220,19 +220,19 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("gifts_check",
 			mcplib.WithDescription("Check the balance of a gift card by ID and PIN (no auth required to check)"),
 		),
-		makeAPIHandler("GET", "/CheckGift/{id}/{pin}", []string{}),
+		makeAPIHandler("GET", "/CheckGift/{id}/{pin}", []string{"id", "pin"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("gifts_delete",
 			mcplib.WithDescription("Remove a stored gift card from the account Destructive operation."),
 		),
-		makeAPIHandler("DELETE", "/StoredGift/{id}", []string{}),
+		makeAPIHandler("DELETE", "/StoredGift/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("gifts_get",
 			mcplib.WithDescription("Get a single stored gift card by ID"),
 		),
-		makeAPIHandler("GET", "/StoredGift/{id}", []string{}),
+		makeAPIHandler("GET", "/StoredGift/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("gifts_list",
@@ -250,13 +250,13 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("gifts_value",
 			mcplib.WithDescription("Get current value/balance of a saved gift card"),
 		),
-		makeAPIHandler("GET", "/GiftValue/{id}", []string{}),
+		makeAPIHandler("GET", "/GiftValue/{id}", []string{"id"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("menu_cache",
 			mcplib.WithDescription("Get the full menu (categories, products, prices, descriptions, images) for a store"),
 		),
-		makeAPIHandler("GET", "/MenuCache/{storeId}", []string{}),
+		makeAPIHandler("GET", "/MenuCache/{storeId}", []string{"storeId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("menu_product_price",
@@ -274,25 +274,25 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("menu_top",
 			mcplib.WithDescription("Get featured top-of-menu items for a store"),
 		),
-		makeAPIHandler("GET", "/MenuTop/{storeId}", []string{}),
+		makeAPIHandler("GET", "/MenuTop/{storeId}", []string{"storeId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("orders_clone",
 			mcplib.WithDescription("Get order data shaped for re-ordering (transforms a past order into a new cart)"),
 		),
-		makeAPIHandler("GET", "/OrderClone/{orderId}", []string{}),
+		makeAPIHandler("GET", "/OrderClone/{orderId}", []string{"orderId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("orders_get",
 			mcplib.WithDescription("Get the full detail of a single past order (items, prices, store, time)"),
 		),
-		makeAPIHandler("GET", "/OrderListItem/{orderId}", []string{}),
+		makeAPIHandler("GET", "/OrderListItem/{orderId}", []string{"orderId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("orders_list",
 			mcplib.WithDescription("List the authenticated user's order history (paginated)"),
 		),
-		makeAPIHandler("GET", "/OrderList/{page}/{pageSize}", []string{}),
+		makeAPIHandler("GET", "/OrderList/{page}/{pageSize}", []string{"page", "pageSize"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("orders_list_gift_cards",
@@ -310,7 +310,7 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("orders_suggestion",
 			mcplib.WithDescription("Get personalized order suggestions for a customer"),
 		),
-		makeAPIHandler("GET", "/OrderSuggestion/{customerId}", []string{}),
+		makeAPIHandler("GET", "/OrderSuggestion/{customerId}", []string{"customerId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("rewards_card",
@@ -322,13 +322,13 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("rewards_coupon_lookup",
 			mcplib.WithDescription("Look up a coupon by its serial number (validate before applying)"),
 		),
-		makeAPIHandler("GET", "/CouponSerial/{serial}", []string{}),
+		makeAPIHandler("GET", "/CouponSerial/{serial}", []string{"serial"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("rewards_history",
 			mcplib.WithDescription("Get reward earning/redemption history (most recent N entries)"),
 		),
-		makeAPIHandler("GET", "/RewardHistory/{customerId}/{count}", []string{}),
+		makeAPIHandler("GET", "/RewardHistory/{customerId}/{count}", []string{"customerId", "count"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("rewards_stored_coupons",
@@ -340,37 +340,37 @@ func RegisterTools(s *server.MCPServer) {
 		mcplib.NewTool("scheduling_slot_list",
 			mcplib.WithDescription("List available time-window slots for a store and service type"),
 		),
-		makeAPIHandler("GET", "/TimeWindows/{storeId}/{serviceType}", []string{}),
+		makeAPIHandler("GET", "/TimeWindows/{storeId}/{serviceType}", []string{"storeId", "serviceType"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("scheduling_slot_list_for_date",
 			mcplib.WithDescription("List allowed slot times for a specific delivery/pickup date (YYYYMMDD)"),
 		),
-		makeAPIHandler("GET", "/TimeWindows/{storeId}/{serviceType}/{date}", []string{}),
+		makeAPIHandler("GET", "/TimeWindows/{storeId}/{serviceType}/{date}", []string{"storeId", "serviceType", "date"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("scheduling_window_days",
 			mcplib.WithDescription("List available delivery or pickup days for a store. serviceType is DEL (delivery) or PICK (pickup)"),
 		),
-		makeAPIHandler("GET", "/TimeWindowDays/{storeId}/{serviceType}", []string{}),
+		makeAPIHandler("GET", "/TimeWindowDays/{storeId}/{serviceType}", []string{"storeId", "serviceType"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("store_compute_quote",
 			mcplib.WithDescription("Compute a quote for a specific store with cart contents (returns Delivery, Drone, Pickup wait values)"),
 		),
-		makeAPIHandler("POST", "/QuoteStore/{storeId}", []string{}),
+		makeAPIHandler("POST", "/QuoteStore/{storeId}", []string{"storeId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("store_get",
 			mcplib.WithDescription("Get a single store by its numeric ID"),
 		),
-		makeAPIHandler("GET", "/Store/{storeId}", []string{}),
+		makeAPIHandler("GET", "/Store/{storeId}", []string{"storeId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("store_get_quote",
 			mcplib.WithDescription("Get quote-store metadata (delivery fee, drone status, pickup wait time) for a single store"),
 		),
-		makeAPIHandler("GET", "/QuoteStore/{storeId}", []string{}),
+		makeAPIHandler("GET", "/QuoteStore/{storeId}", []string{"storeId"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("store_list",

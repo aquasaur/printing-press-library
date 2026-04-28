@@ -26,7 +26,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithDescription("Fetch all SEC submissions for a given CIK (Central Index Key). Used as the seed call when resolving a company's... Returns object."),
 			mcplib.WithString("cik", mcplib.Required(), mcplib.Description("10-digit zero-padded SEC Central Index Key (e.g., 0001318605 for Tesla)")),
 		),
-		makeAPIHandler("GET", "/submissions/CIK{cik}.json", []string{}),
+		makeAPIHandler("GET", "/submissions/CIK{cik}.json", []string{"cik"}),
 	)
 	// Sync tool — populates local database for offline search and sql queries
 	s.AddTool(

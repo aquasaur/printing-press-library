@@ -325,7 +325,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("max_pages", mcplib.Description("Maximum number of pages to fetch. This is an upper limit and not a guarantee of how many pages will be returned.")),
 			mcplib.WithString("cursor", mcplib.Description("Opaque value used to get the next batch of data from a paged collection.")),
 		),
-		makeAPIHandler("GET", "/disruption_counts/{entity_type}", []string{}),
+		makeAPIHandler("GET", "/disruption_counts/{entity_type}", []string{"entity_type"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("flights_get",
@@ -592,7 +592,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("max_pages", mcplib.Description("Maximum number of pages to fetch. This is an upper limit and not a guarantee of how many pages will be returned.")),
 			mcplib.WithString("cursor", mcplib.Description("Opaque value used to get the next batch of data from a paged collection.")),
 		),
-		makeAPIHandler("GET", "/schedules/{date_start}/{date_end}", []string{}),
+		makeAPIHandler("GET", "/schedules/{date_start}/{date_end}", []string{"date_start", "date_end"}),
 	)
 	// Sync tool
 	s.AddTool(

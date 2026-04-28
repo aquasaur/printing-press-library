@@ -306,7 +306,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithDescription("Check a calendar connection Returns CalendarsResponse."),
 			mcplib.WithString("calendar", mcplib.Description("Calendar")),
 		),
-		makeAPIHandler("GET", "/v2/calendars/{calendar}/check", []string{}),
+		makeAPIHandler("GET", "/v2/calendars/{calendar}/check", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("calendars_connect_calendars-redirect",
@@ -315,21 +315,21 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("isDryRun", mcplib.Required(), mcplib.Description("Is dry run")),
 			mcplib.WithString("redir", mcplib.Description("Redirect URL after successful calendar authorization.")),
 		),
-		makeAPIHandler("GET", "/v2/calendars/{calendar}/connect", []string{}),
+		makeAPIHandler("GET", "/v2/calendars/{calendar}/connect", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("calendars_credentials_calendars-sync",
 			mcplib.WithDescription("Save Apple calendar credentials"),
 			mcplib.WithString("calendar", mcplib.Description("Calendar")),
 		),
-		makeAPIHandler("POST", "/v2/calendars/{calendar}/credentials", []string{}),
+		makeAPIHandler("POST", "/v2/calendars/{calendar}/credentials", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("calendars_disconnect_calendars-delete-calendar-credentials",
 			mcplib.WithDescription("Disconnect a calendar Returns DeletedCalendarCredentialsOutputResponseDto."),
 			mcplib.WithString("calendar", mcplib.Description("Calendar")),
 		),
-		makeAPIHandler("POST", "/v2/calendars/{calendar}/disconnect", []string{}),
+		makeAPIHandler("POST", "/v2/calendars/{calendar}/disconnect", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("calendars_event_cal-unified-calendars-get-calendar-details",
@@ -352,7 +352,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithDescription("Create a calendar event Returns GetUnifiedCalendarEventOutput."),
 			mcplib.WithString("calendar", mcplib.Description("Calendar")),
 		),
-		makeAPIHandler("POST", "/v2/calendars/{calendar}/events", []string{}),
+		makeAPIHandler("POST", "/v2/calendars/{calendar}/events", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("calendars_events_cal-unified-calendars-delete-calendar",
@@ -379,7 +379,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("timeZone", mcplib.Description("IANA time zone for the request (e.g. America/New_York)")),
 			mcplib.WithString("calendarId", mcplib.Description("Calendar ID. Use 'primary' for the user's primary calendar, or the external ID of a connected calendar.")),
 		),
-		makeAPIHandler("GET", "/v2/calendars/{calendar}/events", []string{}),
+		makeAPIHandler("GET", "/v2/calendars/{calendar}/events", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("calendars_events_cal-unified-calendars-update-calendar",
@@ -397,7 +397,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("to", mcplib.Required(), mcplib.Description("End of the date range (ISO 8601 date or date-time)")),
 			mcplib.WithString("timeZone", mcplib.Description("IANA time zone (e.g. America/New_York)")),
 		),
-		makeAPIHandler("GET", "/v2/calendars/{calendar}/freebusy", []string{}),
+		makeAPIHandler("GET", "/v2/calendars/{calendar}/freebusy", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("calendars_save_calendars",
@@ -406,7 +406,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("code", mcplib.Required(), mcplib.Description("Code")),
 			mcplib.WithString("calendar", mcplib.Description("Calendar")),
 		),
-		makeAPIHandler("GET", "/v2/calendars/{calendar}/save", []string{}),
+		makeAPIHandler("GET", "/v2/calendars/{calendar}/save", []string{"calendar"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("conferencing_get-default",
@@ -425,21 +425,21 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithDescription("Connect your conferencing application Returns ConferencingAppOutputResponseDto."),
 			mcplib.WithString("app", mcplib.Description("Conferencing application type")),
 		),
-		makeAPIHandler("POST", "/v2/conferencing/{app}/connect", []string{}),
+		makeAPIHandler("POST", "/v2/conferencing/{app}/connect", []string{"app"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("conferencing_default_conferencing",
 			mcplib.WithDescription("Set your default conferencing application Returns SetDefaultConferencingAppOutputResponseDto."),
 			mcplib.WithString("app", mcplib.Description("Conferencing application type")),
 		),
-		makeAPIHandler("POST", "/v2/conferencing/{app}/default", []string{}),
+		makeAPIHandler("POST", "/v2/conferencing/{app}/default", []string{"app"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("conferencing_disconnect_conferencing",
 			mcplib.WithDescription("Disconnect your conferencing application Returns DisconnectConferencingAppOutputResponseDto. Destructive."),
 			mcplib.WithString("app", mcplib.Description("Conferencing application type")),
 		),
-		makeAPIHandler("DELETE", "/v2/conferencing/{app}/disconnect", []string{}),
+		makeAPIHandler("DELETE", "/v2/conferencing/{app}/disconnect", []string{"app"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("conferencing_oauth_conferencing-redirect",
@@ -448,7 +448,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("returnTo", mcplib.Required(), mcplib.Description("Return to")),
 			mcplib.WithString("onErrorReturnTo", mcplib.Required(), mcplib.Description("On error return to")),
 		),
-		makeAPIHandler("GET", "/v2/conferencing/{app}/oauth/auth-url", []string{}),
+		makeAPIHandler("GET", "/v2/conferencing/{app}/oauth/auth-url", []string{"app"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("conferencing_oauth_conferencing-save",
@@ -457,7 +457,7 @@ func RegisterTools(s *server.MCPServer) {
 			mcplib.WithString("app", mcplib.Description("Conferencing application type")),
 			mcplib.WithString("code", mcplib.Required(), mcplib.Description("Code")),
 		),
-		makeAPIHandler("GET", "/v2/conferencing/{app}/oauth/callback", []string{}),
+		makeAPIHandler("GET", "/v2/conferencing/{app}/oauth/callback", []string{"app"}),
 	)
 	s.AddTool(
 		mcplib.NewTool("destination-calendars_update",
