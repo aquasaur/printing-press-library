@@ -69,5 +69,6 @@
   ],
   "category": "food-and-dining",
   "description": "Recipe GOAT aggregates 15 of the web's most trusted recipe sites (King Arthur, Serious Eats, Budget Bytes, Smitten Kitchen, Food52, BBC Good Food, and more), ranks results by merged trust + rating + review-count signals, and builds a local SQLite cookbook that powers pantry match, cook log, meal plans, and aisle-grouped shopping lists. Unique commands like `goat` (best-version ranker), `sub` (cross-site substitution aggregation), `tonight` (decision-fatigue killer), and `cookbook match --have` (pantry match) solve problems no single recipe site can.",
-  "auth_key_url": "https://fdc.nal.usda.gov/api-key-signup"
+  "auth_key_url": "https://fdc.nal.usda.gov/api-key-signup",
+  "auth_optional": true
 }
