@@ -12,13 +12,14 @@ import (
 )
 
 func newGraphqlNotificationsTimelineGetCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var flagVariables string
 	var flagFeatures string
 
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "get notification list. timeline_type:[All, Verified, Mentions]",
-		Example: "  x-twitter-pp-cli graphql notifications-timeline get",
+		Example: "  twitter-pp-cli graphql notifications-timeline get",
 		Annotations: map[string]string{"pp:endpoint": "notifications-timeline.get", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("variables") && !flags.dryRun {
@@ -33,6 +34,7 @@ func newGraphqlNotificationsTimelineGetCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/NotificationsTimeline"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			params := map[string]string{}
 			if flagVariables != "" {
 				params["variables"] = fmt.Sprintf("%v", flagVariables)
@@ -82,6 +84,7 @@ func newGraphqlNotificationsTimelineGetCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "GquVPn-SKYxKLgLsRPpJ6g", "Path query id")
 	cmd.Flags().StringVar(&flagVariables, "variables", "", "Variables")
 	cmd.Flags().StringVar(&flagFeatures, "features", "", "Features")
 

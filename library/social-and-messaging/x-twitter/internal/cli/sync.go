@@ -59,22 +59,22 @@ Exit codes & warnings:
   --strict to exit non-zero on any per-resource failure. Exit is always
   non-zero when every selected resource failed, regardless of --strict.`,
 		Example: `  # Sync all resources
-  x-twitter-pp-cli sync
+  twitter-pp-cli sync
 
   # Sync specific resources only
-  x-twitter-pp-cli sync --resources channels,messages
+  twitter-pp-cli sync --resources channels,messages
 
   # Full resync (ignore previous checkpoint)
-  x-twitter-pp-cli sync --full
+  twitter-pp-cli sync --full
 
   # Incremental sync: only records from the last 7 days
-  x-twitter-pp-cli sync --since 7d
+  twitter-pp-cli sync --since 7d
 
   # Parallel sync with 8 workers
-  x-twitter-pp-cli sync --concurrency 8
+  twitter-pp-cli sync --concurrency 8
 
   # Latest-only: refresh head of each resource, no historical backfill
-  x-twitter-pp-cli sync --latest-only`,
+  twitter-pp-cli sync --latest-only`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := flags.newClient()
 			if err != nil {
@@ -83,7 +83,7 @@ Exit codes & warnings:
 			c.NoCache = true
 
 			if dbPath == "" {
-				dbPath = defaultDBPath("x-twitter-pp-cli")
+				dbPath = defaultDBPath("twitter-pp-cli")
 			}
 
 			db, err := store.OpenWithContext(cmd.Context(), dbPath)
@@ -252,7 +252,7 @@ Exit codes & warnings:
 	cmd.Flags().BoolVar(&full, "full", false, "Full resync (ignore previous checkpoint)")
 	cmd.Flags().StringVar(&since, "since", "", "Incremental sync duration (e.g. 7d, 24h, 1w, 30m)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Number of parallel sync workers")
-	cmd.Flags().StringVar(&dbPath, "db", "", "Database path (default: ~/.local/share/x-twitter-pp-cli/data.db)")
+	cmd.Flags().StringVar(&dbPath, "db", "", "Database path (default: ~/.local/share/twitter-pp-cli/data.db)")
 	cmd.Flags().IntVar(&maxPages, "max-pages", 100, "Maximum pages to fetch per resource (0 = unlimited; cap-hit emits a sync_warning event)")
 	cmd.Flags().BoolVar(&latestOnly, "latest-only", false, "Refresh head of each resource only; clears resume cursor and caps pages at 1. Mutually exclusive with --since (--since wins).")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Exit non-zero on any per-resource failure (default: only critical failures or all-resource failure exit non-zero).")
@@ -272,7 +272,10 @@ func syncResource(c interface {
 		fmt.Fprintf(os.Stderr, `{"event":"sync_start","resource":"%s"}`+"\n", resource)
 	}
 
-	path := syncResourcePath(resource)
+	path, err := syncResourcePath(resource)
+	if err != nil {
+		return syncResult{Resource: resource, Err: err, Duration: time.Since(started)}
+	}
 	var totalCount int
 
 	// Resume cursor from sync_state (unless --full cleared it)
@@ -751,76 +754,76 @@ func upsertSingleObject(db *store.Store, resource string, data json.RawMessage) 
 	}
 
 	switch resource {
-	case "user_highlights_tweets":
-		return db.UpsertUserHighlightsTweets(data)
-	case "user_media":
-		return db.UpsertUserMedia(data)
-	case "user_tweets_and_replies":
-		return db.UpsertUserTweetsAndReplies(data)
-	case "create_retweet":
-		return db.UpsertCreateRetweet(data)
-	case "delete_retweet":
-		return db.UpsertDeleteRetweet(data)
-	case "favorite_tweet":
-		return db.UpsertFavoriteTweet(data)
-	case "user_by_rest_id":
-		return db.UpsertUserByRestId(data)
-	case "user_tweets":
-		return db.UpsertUserTweets(data)
-	case "delete_tweet":
-		return db.UpsertDeleteTweet(data)
-	case "favoriters":
-		return db.UpsertFavoriters(data)
-	case "home_latest_timeline":
-		return db.UpsertHomeLatestTimeline(data)
-	case "likes":
-		return db.UpsertLikes(data)
-	case "list_latest_tweets_timeline":
-		return db.UpsertListLatestTweetsTimeline(data)
-	case "tweet_detail":
-		return db.UpsertTweetDetail(data)
-	case "bookmarks":
-		return db.UpsertBookmarks(data)
-	case "delete_bookmark":
-		return db.UpsertDeleteBookmark(data)
-	case "profile_spotlights_query":
-		return db.UpsertProfileSpotlightsQuery(data)
-	case "retweeters":
-		return db.UpsertRetweeters(data)
-	case "unfavorite_tweet":
-		return db.UpsertUnfavoriteTweet(data)
-	case "users_by_rest_ids":
-		return db.UpsertUsersByRestIds(data)
-	case "community_about_timeline":
-		return db.UpsertCommunityAboutTimeline(data)
-	case "community_tweets_timeline":
-		return db.UpsertCommunityTweetsTimeline(data)
-	case "home_timeline":
-		return db.UpsertHomeTimeline(data)
-	case "search_timeline":
-		return db.UpsertSearchTimeline(data)
-	case "create_tweet":
-		return db.UpsertCreateTweet(data)
-	case "following":
-		return db.UpsertFollowing(data)
-	case "create_bookmark":
-		return db.UpsertCreateBookmark(data)
-	case "followers_you_know":
-		return db.UpsertFollowersYouKnow(data)
-	case "tweet_result_by_rest_id":
-		return db.UpsertTweetResultByRestId(data)
-	case "community_media_timeline":
-		return db.UpsertCommunityMediaTimeline(data)
-	case "followers":
-		return db.UpsertFollowers(data)
-	case "notifications_timeline":
-		return db.UpsertNotificationsTimeline(data)
-	case "user_by_screen_name":
-		return db.UpsertUserByScreenName(data)
 	case "1_1":
 		return db.UpsertV11(data)
 	case "twitter_search":
 		return db.UpsertTwitterSearch(data)
+	case "unfavorite_tweet":
+		return db.UpsertUnfavoriteTweet(data)
+	case "user_highlights_tweets":
+		return db.UpsertUserHighlightsTweets(data)
+	case "bookmarks":
+		return db.UpsertBookmarks(data)
+	case "create_bookmark":
+		return db.UpsertCreateBookmark(data)
+	case "create_tweet":
+		return db.UpsertCreateTweet(data)
+	case "followers_you_know":
+		return db.UpsertFollowersYouKnow(data)
+	case "home_timeline":
+		return db.UpsertHomeTimeline(data)
+	case "user_tweets":
+		return db.UpsertUserTweets(data)
+	case "community_about_timeline":
+		return db.UpsertCommunityAboutTimeline(data)
+	case "delete_retweet":
+		return db.UpsertDeleteRetweet(data)
+	case "favorite_tweet":
+		return db.UpsertFavoriteTweet(data)
+	case "list_latest_tweets_timeline":
+		return db.UpsertListLatestTweetsTimeline(data)
+	case "followers":
+		return db.UpsertFollowers(data)
+	case "following":
+		return db.UpsertFollowing(data)
+	case "home_latest_timeline":
+		return db.UpsertHomeLatestTimeline(data)
+	case "tweet_detail":
+		return db.UpsertTweetDetail(data)
+	case "user_by_screen_name":
+		return db.UpsertUserByScreenName(data)
+	case "user_media":
+		return db.UpsertUserMedia(data)
+	case "create_retweet":
+		return db.UpsertCreateRetweet(data)
+	case "likes":
+		return db.UpsertLikes(data)
+	case "community_tweets_timeline":
+		return db.UpsertCommunityTweetsTimeline(data)
+	case "favoriters":
+		return db.UpsertFavoriters(data)
+	case "user_by_rest_id":
+		return db.UpsertUserByRestId(data)
+	case "user_tweets_and_replies":
+		return db.UpsertUserTweetsAndReplies(data)
+	case "community_media_timeline":
+		return db.UpsertCommunityMediaTimeline(data)
+	case "profile_spotlights_query":
+		return db.UpsertProfileSpotlightsQuery(data)
+	case "retweeters":
+		return db.UpsertRetweeters(data)
+	case "search_timeline":
+		return db.UpsertSearchTimeline(data)
+	case "tweet_result_by_rest_id":
+		return db.UpsertTweetResultByRestId(data)
+	case "users_by_rest_ids":
+		return db.UpsertUsersByRestIds(data)
+	case "delete_bookmark":
+		return db.UpsertDeleteBookmark(data)
+	case "delete_tweet":
+		return db.UpsertDeleteTweet(data)
+	case "notifications_timeline":
+		return db.UpsertNotificationsTimeline(data)
 	default:
 		return db.Upsert(resource, id, data)
 	}
@@ -864,14 +867,14 @@ func defaultSyncResources() []string {
 // syncResourcePath maps resource names to their actual API endpoint paths.
 // For REST APIs this is typically "/<resource>". For non-REST APIs (e.g., Steam)
 // this preserves the actual endpoint path like "/ISteamApps/GetAppList/v2".
-func syncResourcePath(resource string) string {
+func syncResourcePath(resource string) (string, error) {
 	paths := map[string]string{
 		"1-1": "/1.1/friends/following/list.json",
 	}
 	if p, ok := paths[resource]; ok {
-		return p
+		return p, nil
 	}
-	return "/" + resource
+	return "", fmt.Errorf("unknown sync resource %q", resource)
 }
 
 // resourceIDFieldOverrides projects per-resource IDField (set by the profiler

@@ -13,6 +13,7 @@ import (
 )
 
 func newGraphqlCreateTweetPostCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var bodyQueryId string
 	var stdinBody bool
 
@@ -20,7 +21,7 @@ func newGraphqlCreateTweetPostCmd(flags *rootFlags) *cobra.Command {
 		Use:   "post",
 		Aliases: []string{"create"},
 		Short: "create Tweet",
-		Example: "  x-twitter-pp-cli graphql create-tweet post --queryId example-value",
+		Example: "  twitter-pp-cli graphql create-tweet post --queryId example-value",
 		Annotations: map[string]string{"pp:endpoint": "create-tweet.post"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !stdinBody {
@@ -31,6 +32,7 @@ func newGraphqlCreateTweetPostCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/CreateTweet"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			var body map[string]any
 			if stdinBody {
 				stdinData, err := io.ReadAll(os.Stdin)
@@ -113,6 +115,7 @@ func newGraphqlCreateTweetPostCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "IID9x6WsdMnTlXnzXGq8ng", "Path query id")
 	cmd.Flags().StringVar(&bodyQueryId, "query-id", "IID9x6WsdMnTlXnzXGq8ng", "Query id")
 	cmd.Flags().BoolVar(&stdinBody, "stdin", false, "Read request body as JSON from stdin")
 

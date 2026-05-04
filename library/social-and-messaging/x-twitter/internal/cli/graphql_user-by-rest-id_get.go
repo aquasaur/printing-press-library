@@ -12,13 +12,14 @@ import (
 )
 
 func newGraphqlUserByRestIdGetCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var flagVariables string
 	var flagFeatures string
 
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "get user by rest id",
-		Example: "  x-twitter-pp-cli graphql user-by-rest-id get",
+		Example: "  twitter-pp-cli graphql user-by-rest-id get",
 		Annotations: map[string]string{"pp:endpoint": "user-by-rest-id.get", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("variables") && !flags.dryRun {
@@ -33,6 +34,7 @@ func newGraphqlUserByRestIdGetCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/UserByRestId"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			params := map[string]string{}
 			if flagVariables != "" {
 				params["variables"] = fmt.Sprintf("%v", flagVariables)
@@ -82,6 +84,7 @@ func newGraphqlUserByRestIdGetCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "tD8zKvQzwY3kdx5yz6YmOw", "Path query id")
 	cmd.Flags().StringVar(&flagVariables, "variables", "", "Variables")
 	cmd.Flags().StringVar(&flagFeatures, "features", "", "Features")
 

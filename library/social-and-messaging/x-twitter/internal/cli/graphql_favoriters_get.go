@@ -12,13 +12,14 @@ import (
 )
 
 func newGraphqlFavoritersGetCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var flagVariables string
 	var flagFeatures string
 
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "get tweet favoriters",
-		Example: "  x-twitter-pp-cli graphql favoriters get",
+		Example: "  twitter-pp-cli graphql favoriters get",
 		Annotations: map[string]string{"pp:endpoint": "favoriters.get", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("variables") && !flags.dryRun {
@@ -33,6 +34,7 @@ func newGraphqlFavoritersGetCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/Favoriters"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			params := map[string]string{}
 			if flagVariables != "" {
 				params["variables"] = fmt.Sprintf("%v", flagVariables)
@@ -82,6 +84,7 @@ func newGraphqlFavoritersGetCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "G27_CXbgIP3G9Fod_2RMUA", "Path query id")
 	cmd.Flags().StringVar(&flagVariables, "variables", "", "Variables")
 	cmd.Flags().StringVar(&flagFeatures, "features", "", "Features")
 

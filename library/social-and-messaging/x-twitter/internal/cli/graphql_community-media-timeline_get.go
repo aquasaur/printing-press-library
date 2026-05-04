@@ -12,13 +12,14 @@ import (
 )
 
 func newGraphqlCommunityMediaTimelineGetCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var flagVariables string
 	var flagFeatures string
 
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "get media list of community",
-		Example: "  x-twitter-pp-cli graphql community-media-timeline get",
+		Example: "  twitter-pp-cli graphql community-media-timeline get",
 		Annotations: map[string]string{"pp:endpoint": "community-media-timeline.get", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("variables") && !flags.dryRun {
@@ -33,6 +34,7 @@ func newGraphqlCommunityMediaTimelineGetCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/CommunityMediaTimeline"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			params := map[string]string{}
 			if flagVariables != "" {
 				params["variables"] = fmt.Sprintf("%v", flagVariables)
@@ -82,6 +84,7 @@ func newGraphqlCommunityMediaTimelineGetCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "eJqXEMJZ0w89TEGgPwEatw", "Path query id")
 	cmd.Flags().StringVar(&flagVariables, "variables", "", "Variables")
 	cmd.Flags().StringVar(&flagFeatures, "features", "", "Features")
 

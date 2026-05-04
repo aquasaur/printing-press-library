@@ -13,6 +13,7 @@ import (
 )
 
 func newGraphqlCreateRetweetPostCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var bodyQueryId string
 	var stdinBody bool
 
@@ -20,7 +21,7 @@ func newGraphqlCreateRetweetPostCmd(flags *rootFlags) *cobra.Command {
 		Use:   "post",
 		Aliases: []string{"create"},
 		Short: "create Retweet",
-		Example: "  x-twitter-pp-cli graphql create-retweet post --queryId example-value",
+		Example: "  twitter-pp-cli graphql create-retweet post --queryId example-value",
 		Annotations: map[string]string{"pp:endpoint": "create-retweet.post"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !stdinBody {
@@ -31,6 +32,7 @@ func newGraphqlCreateRetweetPostCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/CreateRetweet"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			var body map[string]any
 			if stdinBody {
 				stdinData, err := io.ReadAll(os.Stdin)
@@ -113,6 +115,7 @@ func newGraphqlCreateRetweetPostCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "ojPdsZsimiJrUGLR1sjUtA", "Path query id")
 	cmd.Flags().StringVar(&bodyQueryId, "query-id", "ojPdsZsimiJrUGLR1sjUtA", "Query id")
 	cmd.Flags().BoolVar(&stdinBody, "stdin", false, "Read request body as JSON from stdin")
 

@@ -1169,3 +1169,15 @@ func defaultDBPath(name string) string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "share", name, "data.db")
 }
+
+// replacePathParam substitutes a single {name}-style placeholder in an
+// OpenAPI-style path with a concrete value. Used by graphql/* commands to
+// fill operation-routing parameters (e.g. {pathQueryId}) at request time.
+//
+// The Printing Press generator emits call sites that depend on this helper
+// (since #567) but does NOT emit the helper itself. Tracked in a follow-up
+// issue against printing-press; this CLI carries the helper inline until
+// the generator emits it.
+func replacePathParam(path, name, value string) string {
+	return strings.ReplaceAll(path, "{"+name+"}", value)
+}

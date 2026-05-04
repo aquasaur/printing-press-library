@@ -12,6 +12,7 @@ import (
 )
 
 func newGraphqlUserMediaGetCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var flagVariables string
 	var flagFeatures string
 	var flagFieldToggles string
@@ -19,7 +20,7 @@ func newGraphqlUserMediaGetCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "get user media tweets",
-		Example: "  x-twitter-pp-cli graphql user-media get",
+		Example: "  twitter-pp-cli graphql user-media get",
 		Annotations: map[string]string{"pp:endpoint": "user-media.get", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("variables") && !flags.dryRun {
@@ -37,6 +38,7 @@ func newGraphqlUserMediaGetCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/UserMedia"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			params := map[string]string{}
 			if flagVariables != "" {
 				params["variables"] = fmt.Sprintf("%v", flagVariables)
@@ -89,6 +91,7 @@ func newGraphqlUserMediaGetCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "1H9ibIdchWO0_vz3wJLDTA", "Path query id")
 	cmd.Flags().StringVar(&flagVariables, "variables", "", "Variables")
 	cmd.Flags().StringVar(&flagFeatures, "features", "", "Features")
 	cmd.Flags().StringVar(&flagFieldToggles, "field-toggles", "", "Field toggles")

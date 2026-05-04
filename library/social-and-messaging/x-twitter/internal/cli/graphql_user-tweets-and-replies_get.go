@@ -12,6 +12,7 @@ import (
 )
 
 func newGraphqlUserTweetsAndRepliesGetCmd(flags *rootFlags) *cobra.Command {
+	var flagPathQueryId string
 	var flagVariables string
 	var flagFeatures string
 	var flagFieldToggles string
@@ -19,7 +20,7 @@ func newGraphqlUserTweetsAndRepliesGetCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "get user replies tweets",
-		Example: "  x-twitter-pp-cli graphql user-tweets-and-replies get",
+		Example: "  twitter-pp-cli graphql user-tweets-and-replies get",
 		Annotations: map[string]string{"pp:endpoint": "user-tweets-and-replies.get", "mcp:read-only": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("variables") && !flags.dryRun {
@@ -37,6 +38,7 @@ func newGraphqlUserTweetsAndRepliesGetCmd(flags *rootFlags) *cobra.Command {
 			}
 
 			path := "/graphql/{pathQueryId}/UserTweetsAndReplies"
+			path = replacePathParam(path, "pathQueryId", fmt.Sprintf("%v", flagPathQueryId))
 			params := map[string]string{}
 			if flagVariables != "" {
 				params["variables"] = fmt.Sprintf("%v", flagVariables)
@@ -89,6 +91,7 @@ func newGraphqlUserTweetsAndRepliesGetCmd(flags *rootFlags) *cobra.Command {
 			return printOutputWithFlags(cmd.OutOrStdout(), data, flags)
 		},
 	}
+	cmd.Flags().StringVar(&flagPathQueryId, "path-query-id", "6hvhmQQ9zPIR8RZWHFAm4w", "Path query id")
 	cmd.Flags().StringVar(&flagVariables, "variables", "", "Variables")
 	cmd.Flags().StringVar(&flagFeatures, "features", "", "Features")
 	cmd.Flags().StringVar(&flagFieldToggles, "field-toggles", "", "Field toggles")

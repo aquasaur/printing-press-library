@@ -15,7 +15,15 @@ import (
 // DefaultBearerToken is the public bearer token used by the X web client.
 // It is not user-secret; it identifies the X web app to the GraphQL backend.
 // Override via env X_TWITTER_BEARER_TOKEN if X rotates it.
-const DefaultBearerToken = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3DbjLTQ4fjfwpTk0EqOZJEqiWVNfdz3Mxh99gHLs5Z9SuRf0CXhd"
+//
+// Last refreshed 2026-05-04 from abs.twimg.com/responsive-web/client-web/main.0cfc94ca.js.
+// X rotates this periodically; when the CLI starts returning code 89
+// "Invalid or expired token", refresh by running:
+//
+//	curl -s https://x.com | grep -oE 'main\.[a-z0-9]+\.js' | head -1 | \
+//	  xargs -I{} curl -s "https://abs.twimg.com/responsive-web/client-web/{}" | \
+//	  grep -oE 'AAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%]{80,140}' | head -1
+const DefaultBearerToken = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
 
 type Config struct {
 	BaseURL string `toml:"base_url"`
