@@ -1,0 +1,9 @@
+# Runtime artifacts — not part of the source tree
+/x-twitter-pp-cli
+/x-twitter-pp-mcp
+/build/
+/shared/
+
+# Local config / state
+/data.db
+*.share.jsonl
