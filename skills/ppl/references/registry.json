@@ -418,7 +418,7 @@
       "description": "Trade prediction markets, persist tick data, and answer category-level P&L questions Kalshi.com cannot.",
       "path": "library/payments/kalshi",
       "mcp": {
-        "binary": "kalshi-trade-manual-pp-mcp",
+        "binary": "kalshi-pp-mcp",
         "transport": "stdio",
         "tool_count": 96,
         "public_tool_count": 0,
