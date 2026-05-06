@@ -1,7 +1,7 @@
 {
-  "dir": "/Users/dinakar/printing-press/.runstate/printing_press-a381d6ab/runs/20260503-014536/working/x-twitter-pp-cli",
-  "spec_path": "/Users/dinakar/printing-press/.runstate/printing_press-a381d6ab/runs/20260503-014536/working/x-twitter-pp-cli/spec.yaml",
-  "verdict": "FAIL",
+  "dir": "/Users/dinakar/printing-press/.publish-repo/library/social-and-messaging/x-twitter",
+  "spec_path": "/Users/dinakar/printing-press/.publish-repo/library/social-and-messaging/x-twitter/spec.yaml",
+  "verdict": "PASS",
   "path_check": {
     "tested": 4,
     "valid": 4,
@@ -23,7 +23,7 @@
     "dead": 0
   },
   "dead_functions": {
-    "total": 48,
+    "total": 49,
     "dead": 0
   },
   "pipeline_check": {
@@ -74,15 +74,10 @@
     "checked": 100
   },
   "test_presence": {
-    "checked": 1,
-    "missing_tests": [
-      "share"
-    ]
+    "checked": 1
   },
   "naming_check": {
     "checked": 100
   },
-  "issues": [
-    "pure-logic packages with no tests: share"
-  ]
+  "issues": null
 }

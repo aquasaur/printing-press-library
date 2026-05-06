@@ -3,7 +3,13 @@ name: pp-x-twitter
 description: "Use X from your terminal with your browser session — no paid API key, with a local SQLite database that powers relationship analytics no other tool offers. Trigger phrases: `who isn't following me back on X`, `who unfollowed me on Twitter`, `show my mutuals on X`, `ghost followers Twitter`, `search my saved tweets`, `whois on X`, `use x-twitter`, `run x-twitter`."
 argument-hint: "<command> [args] | install cli|mcp"
 allowed-tools: "Read Bash"
-metadata: '{"openclaw":{"requires":{"bins":["x-twitter-pp-cli"]},"install":[{"id":"go","kind":"shell","command":"go install github.com/mvanhorn/printing-press-library/library/social-and-messaging/x-twitter/cmd/x-twitter-pp-cli@latest","bins":["x-twitter-pp-cli"],"label":"Install via go install"}]}}'
+metadata:
+  openclaw:
+    requires:
+      bins:
+        - kind: go
+          name: x-twitter-pp-cli
+          module: github.com/mvanhorn/printing-press-library/library/social-and-messaging/x-twitter
 ---
 
 # X (Twitter) — Printing Press CLI

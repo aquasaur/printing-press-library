@@ -119,6 +119,16 @@ func (c *Client) writeCache(path string, params map[string]string, data json.Raw
 	os.WriteFile(cacheFile, []byte(data), 0o644)
 }
 
+// invalidateCache wholesale-removes the cache directory so the next read
+// after a mutation cannot return a stale snapshot. Selective per-resource
+// invalidation rejected: cache keys are opaque sha256 hashes.
+func (c *Client) invalidateCache() {
+	if c.cacheDir == "" {
+		return
+	}
+	_ = os.RemoveAll(c.cacheDir)
+}
+
 func (c *Client) Post(path string, body any) (json.RawMessage, int, error) {
 	return c.do("POST", path, nil, body, nil)
 }
@@ -249,6 +259,9 @@ func (c *Client) do(method, path string, params map[string]string, body any, hea
 		// Success
 		if resp.StatusCode < 400 {
 			c.limiter.OnSuccess()
+			if method != http.MethodGet && !c.DryRun {
+				c.invalidateCache()
+			}
 			return json.RawMessage(respBody), resp.StatusCode, nil
 		}
 

@@ -1,5 +1,9 @@
 {
-  "timestamp": "2026-05-03T16:54:21.597235Z",
-  "cli_dir": "/Users/dinakar/printing-press/.runstate/printing_press-a381d6ab/runs/20260503-014536/working/x-twitter-pp-cli",
-  "findings": null
+  "timestamp": "2026-05-06T05:14:25.12017Z",
+  "cli_dir": "/Users/dinakar/printing-press/.publish-repo/library/social-and-messaging/x-twitter",
+  "findings": null,
+  "scorecard_before": {
+    "mcp_description_quality": 10,
+    "captured": "2026-05-06T05:13:23.069969Z"
+  }
 }
