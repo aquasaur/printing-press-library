@@ -20,6 +20,35 @@ go install github.com/mvanhorn/printing-press-library/library/other/x-twitter/cm
 
 x-twitter uses cookie-based auth captured from your logged-in browser. Run `x-twitter auth login --chrome` to import your X session cookies (auth_token, ct0, guest_id) from Chrome. The CLI then signs every request with the matching x-csrf-token header and the standard X web-client bearer token. No paid X API tier needed. Cookies expire — re-run `auth login --chrome` whenever `doctor` reports an expired session.
 
+
+## Known Limitations
+
+**Read commands work; write commands silently fail.**
+
+Cookie auth (auth_token + ct0 + guest_id + bearer) is sufficient for **read** operations against X's GraphQL API — sync, search, user lookup, follower/following lists, timeline reads, and all the relationship analytics this CLI is built around. Verified end-to-end on real accounts (1k+ followers/following synced, 500+ asymmetric relationships surfaced).
+
+It is **not** sufficient for **write** operations. Since 2024, X requires an additional `x-client-transaction-id` header on mutating GraphQL endpoints (CreateTweet, FavoriteTweet, follow/unfollow, retweet, bookmark mutations, DM send). This header is a per-request signature derived from a verification anchor in X's web client JS bundle. The CLI does not currently generate it. Without it, X returns HTTP 200 with `success: true` and an **empty `tweet_results: {}`** — the tweet (or like, follow, etc.) is silently dropped.
+
+If you call any of these via this CLI:
+
+| Command | Behavior |
+|---|---|
+| `graphql create-tweet post` | Returns 200, no tweet appears in your timeline |
+| `graphql favorite-tweet post` | Returns 200, no like recorded |
+| `graphql create-retweet post` | Returns 200, no retweet appears |
+| `graphql delete-tweet post` | Returns 200, no deletion |
+| `graphql create-bookmark post` / `delete-bookmark post` | Returns 200, no change |
+| `users follow` / `users unfollow` (legacy 1.1) | Some legacy 1.1 endpoints work; GraphQL Block/Mute do not |
+| `dms send` | Returns 200, no DM sent |
+
+**Workarounds for writes:**
+
+1. **Use the X web UI directly.** This CLI is a complement, not a replacement. For analytics + sync this CLI shines; for posting, x.com is the path.
+2. **V2 API (paid).** If you have an X API v2 token (\$200+/mo), the CLI's underlying client supports the standard `Authorization: Bearer <key>` flow against `api.x.com/2/*` endpoints; writes work there. Implementing the v2 mutation surface as first-class commands is a separate piece of work.
+3. **Implement the signature.** Reverse-engineering `x-client-transaction-id` is feasible but non-trivial (~200 lines of Go, plus quarterly rotation maintenance). Reference implementations: [twikit](https://github.com/d60/twikit), [trevorhobenshield/twitter-api-client](https://github.com/trevorhobenshield/twitter-api-client).
+
+The CLI does not warn you that a write was silently dropped. Treat any write command's `success: true` response with skepticism until you've verified the side effect via the X web UI or a follow-up read.
+
 ## Quick Start
 
 ```bash
