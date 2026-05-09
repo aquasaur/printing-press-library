@@ -816,6 +816,27 @@
       }
     },
     {
+      "name": "opensnow",
+      "category": "productivity",
+      "api": "OpenSnow",
+      "description": "Hyper-local weather forecasts and conditions for any mountain location and elevation, worldwide. Provides current conditions, hourly forecasts, 5-day day/night snow forecasts, resort snow reports, and expert-written Daily Snow posts. Authentication via api_key query parameter (partnership access only).",
+      "path": "library/productivity/opensnow",
+      "mcp": {
+        "binary": "opensnow-pp-mcp",
+        "transports": [
+          "stdio"
+        ],
+        "tool_count": 5,
+        "public_tool_count": 0,
+        "auth_type": "api_key",
+        "env_vars": [
+          "OPENSNOW_API_KEY"
+        ],
+        "mcp_ready": "full",
+        "spec_format": "openapi3"
+      }
+    },
+    {
       "name": "pagliacci",
       "category": "food-and-dining",
       "api": "Pagliacci Pizza",
