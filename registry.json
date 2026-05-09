@@ -331,6 +331,7 @@
       "api": "Digg AI",
       "description": "Tail the Digg AI 1000's news cycle from the terminal — read-only, with the full pipeline event stream and...",
       "path": "library/media-and-entertainment/digg",
+      "printer": "mvanhorn",
       "printer_name": "Matt Van Horn",
       "mcp": {
         "binary": "digg-pp-mcp",
@@ -628,7 +629,8 @@
       "api": "Google Search Console",
       "description": "Every Google Search Console feature you'd reach for, plus an offline SQLite cache that powers period compare, quick...",
       "path": "library/marketing/google-search-console",
-      "printer": "bossriceshark"
+      "printer": "bossriceshark",
+      "printer_name": "Matt"
     },
     {
       "name": "hackernews",
@@ -784,6 +786,8 @@
       "api": "MyFitnessPal",
       "description": "Pull every meal you ever logged out of MyFitnessPal — per-food CSV, agent-shaped trends, and a local SQLite store...",
       "path": "library/productivity/myfitnesspal",
+      "printer": "nickscarabosio",
+      "printer_name": "Nick Scarabosio",
       "mcp": {
         "binary": "myfitnesspal-pp-mcp",
         "transports": [
@@ -868,6 +872,8 @@
       "api": "OpenSnow",
       "description": "Hyper-local weather forecasts and conditions for any mountain location and elevation, worldwide. Provides current conditions, hourly forecasts, 5-day day/night snow forecasts, resort snow reports, and expert-written Daily Snow posts. Authentication via api_key query parameter (partnership access only).",
       "path": "library/productivity/opensnow",
+      "printer": "davemorin",
+      "printer_name": "Dave Morin",
       "mcp": {
         "binary": "opensnow-pp-mcp",
         "transports": [
@@ -1220,6 +1226,30 @@
       }
     },
     {
+      "name": "stripe",
+      "category": "payments",
+      "api": "Stripe",
+      "description": "Every Stripe feature, plus a local SQLite mirror with FTS, cross-entity SQL, and analytics no other Stripe tool ships.",
+      "path": "library/payments/stripe",
+      "printer": "crodorg",
+      "printer_name": "Chris Rodriguez",
+      "mcp": {
+        "binary": "stripe-pp-mcp",
+        "transports": [
+          "stdio",
+          "http"
+        ],
+        "tool_count": 534,
+        "public_tool_count": 0,
+        "auth_type": "bearer_token",
+        "env_vars": [
+          "STRIPE_SECRET_KEY"
+        ],
+        "mcp_ready": "full",
+        "spec_format": "openapi3"
+      }
+    },
+    {
       "name": "substack",
       "category": "media-and-entertainment",
       "api": "Substack",
@@ -1287,6 +1317,30 @@
         "auth_type": "bearer_token",
         "env_vars": [
           "TRIGGER_SECRET_KEY"
+        ],
+        "mcp_ready": "full",
+        "spec_format": "openapi3"
+      }
+    },
+    {
+      "name": "twilio",
+      "category": "social-and-messaging",
+      "api": "Twilio",
+      "description": "Every Twilio Core feature, plus offline message and call history, FTS, and SQL-grade analytics no other Twilio tool...",
+      "path": "library/social-and-messaging/twilio",
+      "printer": "CleverAI-ZH",
+      "printer_name": "Stephan Stoeber",
+      "mcp": {
+        "binary": "twilio-pp-mcp",
+        "transports": [
+          "stdio",
+          "http"
+        ],
+        "tool_count": 197,
+        "public_tool_count": 0,
+        "auth_type": "api_key",
+        "env_vars": [
+          "TWILIO_ACCOUNT_SID_AUTH_TOKEN"
         ],
         "mcp_ready": "full",
         "spec_format": "openapi3"
