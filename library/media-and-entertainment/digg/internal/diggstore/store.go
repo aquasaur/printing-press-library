@@ -159,10 +159,104 @@ func EnsureSchema(db *sql.DB) error {
 			source_title,
 			tokenize='porter unicode61'
 		)`,
+
+		// FTS5 over the AI 1000 author bio + display_name. Lets agents
+		// answer "who works on frontier red teaming?" against the cached
+		// roster (after a single `authors list` call) without a network
+		// round-trip.
+		`CREATE VIRTUAL TABLE IF NOT EXISTS digg_authors_fts USING fts5(
+			username UNINDEXED,
+			display_name,
+			bio,
+			category,
+			tokenize='porter unicode61'
+		)`,
+
+		// Per-cluster posts cache. One row per clusterUrlId; the parsed
+		// posts are stored as a JSON-encoded blob so the schema doesn't
+		// have to track the structured-post-plus-DOM-correlation shape
+		// in normalized form. fetched_at is the cache freshness anchor;
+		// `posts <id>` and `story <id>` honor a 1h TTL by default and
+		// can bypass via --no-cache.
+		`CREATE TABLE IF NOT EXISTS digg_cluster_posts (
+			cluster_url_id TEXT PRIMARY KEY,
+			posts_json TEXT NOT NULL,
+			fetched_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_digg_cluster_posts_at ON digg_cluster_posts(fetched_at)`,
 	}
 	for _, q := range stmts {
 		if _, err := db.Exec(q); err != nil {
 			return fmt.Errorf("ensuring digg schema: %w (stmt: %s)", err, firstLine(q))
+		}
+	}
+	// Migration: add the rich AI-1000-roster columns to digg_authors. The
+	// existing schema predates the /ai/1000 ingest; we add columns
+	// idempotently so older databases keep working.
+	if err := ensureAuthorsRosterColumns(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureAuthorsRosterColumns adds the AI-1000-roster columns to
+// digg_authors if they don't already exist. SQLite has no `ADD COLUMN IF
+// NOT EXISTS`; we read PRAGMA table_info and only run the ALTERs we need.
+func ensureAuthorsRosterColumns(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(digg_authors)`)
+	if err != nil {
+		return fmt.Errorf("reading digg_authors columns: %w", err)
+	}
+	defer rows.Close()
+	have := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scanning digg_authors columns: %w", err)
+		}
+		have[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	wantCols := []struct{ name, ddl string }{
+		{"rank", "INTEGER"},
+		{"previous_rank", "INTEGER"},
+		{"rank_change", "INTEGER"},
+		{"score", "REAL"},
+		{"category", "TEXT"},
+		{"category_rank", "INTEGER"},
+		{"category_confidence", "REAL"},
+		{"followers_count", "INTEGER"},
+		{"followed_by_count", "INTEGER"},
+		{"bio", "TEXT"},
+		{"github_url", "TEXT"},
+		{"vibe_distribution_json", "TEXT"},
+		{"vibe_tweet_count", "INTEGER"},
+		{"profile_image_url", "TEXT"},
+	}
+	for _, c := range wantCols {
+		if have[c.name] {
+			continue
+		}
+		stmt := fmt.Sprintf(`ALTER TABLE digg_authors ADD COLUMN %s %s`, c.name, c.ddl)
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("adding column %s: %w", c.name, err)
+		}
+	}
+	// Indexes used by `authors list` ranking + filters.
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_digg_authors_rank ON digg_authors(rank)`,
+		`CREATE INDEX IF NOT EXISTS idx_digg_authors_rank_change ON digg_authors(rank_change)`,
+		`CREATE INDEX IF NOT EXISTS idx_digg_authors_category ON digg_authors(category, category_rank)`,
+		`CREATE INDEX IF NOT EXISTS idx_digg_authors_followers ON digg_authors(followers_count DESC)`,
+	}
+	for _, q := range indexes {
+		if _, err := db.Exec(q); err != nil {
+			return fmt.Errorf("indexing digg_authors: %w", err)
 		}
 	}
 	return nil
@@ -422,4 +516,207 @@ func nullableInt(v int) any {
 		return nil
 	}
 	return v
+}
+
+// UpsertRoster1000 writes the parsed /ai/1000 roster into digg_authors.
+// One row per username; the rich roster columns (rank, previous_rank,
+// rank_change, score, category, category_rank, followers_count, bio,
+// github_url, vibe_distribution_json, etc.) are upserted on every call.
+//
+// The existing digg_authors columns from cluster ingest (display_name,
+// x_id, avatar_url, influence, podist, contributed_count) are preserved
+// when the roster row already had values populated by sync. The roster
+// path overwrites display_name, avatar_url (via profile_image_url), and
+// x_id (via target_x_id) only when the existing values are empty —
+// callers expect cluster-ingest data to be authoritative for those.
+//
+// Each upsert also writes a parallel row into digg_authors_fts so that
+// `search "<keyword>" --data-source local` can match on bio text.
+//
+// All 3000+ statements (one main upsert + one FTS delete + one FTS
+// insert per author) run inside a single transaction. If any statement
+// fails mid-loop we ROLLBACK so digg_authors and digg_authors_fts can't
+// drift out of sync (e.g. main row updated but FTS row missing or
+// stale). Returns the count actually committed; on error returns 0
+// and the wrapped failure.
+func UpsertRoster1000(db *sql.DB, authors []diggparse.Roster1000Author, fetchedAt time.Time) (int, error) {
+	if len(authors) == 0 {
+		return 0, nil
+	}
+	now := fetchedAt.UTC().Format(time.RFC3339Nano)
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin roster transaction: %w", err)
+	}
+	// Deferred rollback is a no-op after a successful commit (sql.ErrTxDone).
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	written := 0
+	for _, a := range authors {
+		if a.Username == "" {
+			continue
+		}
+		var prevRank, rankChange any
+		if a.PreviousRank != nil {
+			prevRank = *a.PreviousRank
+		}
+		if a.RankChange != nil {
+			rankChange = *a.RankChange
+		}
+		var githubURL any
+		if a.GithubURL != nil {
+			githubURL = *a.GithubURL
+		}
+		var vibeJSON any
+		if len(a.VibeDistribution) > 0 {
+			b, jerr := json.Marshal(a.VibeDistribution)
+			if jerr == nil {
+				vibeJSON = string(b)
+			}
+		}
+		_, err := tx.Exec(`
+			INSERT INTO digg_authors (
+				username, display_name, x_id, avatar_url,
+				rank, previous_rank, rank_change, score,
+				category, category_rank, category_confidence,
+				followers_count, followed_by_count,
+				bio, github_url,
+				vibe_distribution_json, vibe_tweet_count,
+				profile_image_url, last_seen_at
+			) VALUES (
+				?,?,?,?,
+				?,?,?,?,
+				?,?,?,
+				?,?,
+				?,?,
+				?,?,
+				?,?
+			)
+			ON CONFLICT(username) DO UPDATE SET
+				display_name=COALESCE(NULLIF(digg_authors.display_name,''), excluded.display_name),
+				x_id=COALESCE(NULLIF(digg_authors.x_id,''), excluded.x_id),
+				avatar_url=COALESCE(NULLIF(digg_authors.avatar_url,''), excluded.avatar_url),
+				rank=excluded.rank,
+				previous_rank=excluded.previous_rank,
+				rank_change=excluded.rank_change,
+				score=excluded.score,
+				category=COALESCE(NULLIF(excluded.category,''), digg_authors.category),
+				category_rank=excluded.category_rank,
+				category_confidence=excluded.category_confidence,
+				followers_count=excluded.followers_count,
+				followed_by_count=excluded.followed_by_count,
+				bio=COALESCE(NULLIF(excluded.bio,''), digg_authors.bio),
+				github_url=COALESCE(excluded.github_url, digg_authors.github_url),
+				vibe_distribution_json=COALESCE(excluded.vibe_distribution_json, digg_authors.vibe_distribution_json),
+				vibe_tweet_count=excluded.vibe_tweet_count,
+				profile_image_url=COALESCE(NULLIF(excluded.profile_image_url,''), digg_authors.profile_image_url),
+				last_seen_at=excluded.last_seen_at
+		`,
+			a.Username, a.DisplayName, a.TargetXID, a.ProfileImageURL,
+			a.Rank, prevRank, rankChange, a.Score,
+			a.Category, nullableInt(a.CategoryRank), a.CategoryConfidence,
+			a.FollowersCount, a.FollowedByCount,
+			a.Bio, githubURL,
+			vibeJSON, nullableInt(a.VibeTweetCount),
+			a.ProfileImageURL, now,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("upsert roster author %s: %w", a.Username, err)
+		}
+
+		// FTS row: refresh atomically.
+		if _, err := tx.Exec(`DELETE FROM digg_authors_fts WHERE username = ?`, a.Username); err != nil {
+			return 0, fmt.Errorf("fts delete @%s: %w", a.Username, err)
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO digg_authors_fts (username, display_name, bio, category)
+			VALUES (?,?,?,?)
+		`, a.Username, a.DisplayName, a.Bio, a.Category); err != nil {
+			return 0, fmt.Errorf("fts insert @%s: %w", a.Username, err)
+		}
+		written++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit roster transaction: %w", err)
+	}
+	committed = true
+	return written, nil
+}
+
+// UpsertClusterPosts caches the parsed posts for a single cluster.
+// One row per clusterUrlId; subsequent calls overwrite. The posts
+// blob is JSON-marshalled directly from the slice so the structured
+// shape (per-post body / media_urls / repost_context) round-trips
+// untouched on the read side.
+//
+// fetchedAt is the cache anchor — readers compare it to time.Now()
+// against a TTL (1h by default; `--no-cache` bypasses entirely).
+// We store the timestamp in RFC3339Nano UTC so SQL ordering stays
+// monotonic.
+func UpsertClusterPosts(db *sql.DB, clusterUrlID string, posts []diggparse.ClusterPost, fetchedAt time.Time) error {
+	if clusterUrlID == "" {
+		return fmt.Errorf("UpsertClusterPosts: clusterUrlID required")
+	}
+	body, err := json.Marshal(posts)
+	if err != nil {
+		return fmt.Errorf("marshalling cluster posts: %w", err)
+	}
+	now := fetchedAt.UTC().Format(time.RFC3339Nano)
+	_, err = db.Exec(`
+		INSERT INTO digg_cluster_posts (cluster_url_id, posts_json, fetched_at)
+		VALUES (?,?,?)
+		ON CONFLICT(cluster_url_id) DO UPDATE SET
+			posts_json = excluded.posts_json,
+			fetched_at = excluded.fetched_at
+	`, clusterUrlID, string(body), now)
+	if err != nil {
+		return fmt.Errorf("upsert cluster posts %s: %w", clusterUrlID, err)
+	}
+	return nil
+}
+
+// GetClusterPosts reads the cached posts for one clusterUrlId,
+// honoring the supplied TTL. Returns:
+//
+//   - (posts, true, fetchedAt, nil) when a fresh row exists.
+//   - (nil, false, time.Time{}, nil) when no row exists OR the row
+//     has aged past the TTL. The caller refetches in either case.
+//   - (nil, false, time.Time{}, err) on a SQL or JSON-decode error
+//     — surfaced rather than swallowed so flaky storage doesn't
+//     silently look like a cache miss.
+//
+// A zero-or-negative ttl disables the cache (always returns miss).
+func GetClusterPosts(db *sql.DB, clusterUrlID string, ttl time.Duration) ([]diggparse.ClusterPost, bool, time.Time, error) {
+	if clusterUrlID == "" || ttl <= 0 {
+		return nil, false, time.Time{}, nil
+	}
+	var body, fetchedStr string
+	row := db.QueryRow(`SELECT posts_json, fetched_at FROM digg_cluster_posts WHERE cluster_url_id = ?`, clusterUrlID)
+	if err := row.Scan(&body, &fetchedStr); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, time.Time{}, nil
+		}
+		return nil, false, time.Time{}, fmt.Errorf("read cluster posts %s: %w", clusterUrlID, err)
+	}
+	fetchedAt, perr := time.Parse(time.RFC3339Nano, fetchedStr)
+	if perr != nil {
+		// Defensive: if the timestamp is unparseable, treat as a miss
+		// rather than crashing. A subsequent upsert will fix the row.
+		return nil, false, time.Time{}, nil
+	}
+	if time.Since(fetchedAt) > ttl {
+		return nil, false, fetchedAt, nil
+	}
+	var posts []diggparse.ClusterPost
+	if err := json.Unmarshal([]byte(body), &posts); err != nil {
+		return nil, false, fetchedAt, fmt.Errorf("decode cluster posts %s: %w", clusterUrlID, err)
+	}
+	return posts, true, fetchedAt, nil
 }
