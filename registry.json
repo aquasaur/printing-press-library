@@ -756,6 +756,27 @@
       }
     },
     {
+      "name": "marginalrevolution",
+      "category": "media-and-entertainment",
+      "api": "Marginal Revolution",
+      "description": "Read, filter, and extract links from Marginal Revolution through its public RSS feed",
+      "path": "library/media-and-entertainment/marginalrevolution",
+      "printer": "hinuri",
+      "printer_name": "Nuri Chang",
+      "mcp": {
+        "binary": "marginalrevolution-pp-mcp",
+        "transports": [
+          "stdio"
+        ],
+        "tool_count": 1,
+        "public_tool_count": 1,
+        "auth_type": "none",
+        "env_vars": [],
+        "mcp_ready": "full",
+        "spec_format": "openapi3"
+      }
+    },
+    {
       "name": "mercury",
       "category": "payments",
       "api": "Mercury",
