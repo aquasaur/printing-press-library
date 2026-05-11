@@ -755,6 +755,28 @@
       "printer_name": "Matt Van Horn"
     },
     {
+      "name": "jimmy-johns",
+      "category": "food-and-dining",
+      "api": "Jimmy John's",
+      "description": "First terminal CLI for Jimmy John's ordering — local Unwich conversion, agent-native JSON, every endpoint typed.",
+      "path": "library/food-and-dining/jimmy-johns",
+      "printer": "omarshahine",
+      "printer_name": "Omar Shahine",
+      "mcp": {
+        "binary": "jimmy-johns-pp-mcp",
+        "transports": [
+          "stdio",
+          "http"
+        ],
+        "tool_count": 16,
+        "public_tool_count": 8,
+        "auth_type": "cookie",
+        "env_vars": [],
+        "mcp_ready": "partial",
+        "spec_format": "openapi3"
+      }
+    },
+    {
       "name": "jira",
       "category": "project-management",
       "api": "jira",
