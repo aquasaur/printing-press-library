@@ -36,10 +36,56 @@ CREATE TABLE IF NOT EXISTS watches (
   created_at DATETIME NOT NULL DEFAULT (datetime('now')),
   last_polled_at DATETIME,
   last_match_at DATETIME,
-  match_count INTEGER NOT NULL DEFAULT 0
+  match_count INTEGER NOT NULL DEFAULT 0,
+  location_context TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_watches_state ON watches(state);
 `
+
+// ensureWatchSchemaUpgrades performs idempotent in-place schema upgrades
+// for the watches table. CREATE TABLE IF NOT EXISTS is a no-op when the
+// table already exists, so columns added after a database was first
+// initialized never land on older installs. We probe PRAGMA table_info
+// once and ALTER TABLE per missing column.
+//
+// Currently handles the U15 location_context column added so
+// pollOneWatch can anchor on a watch's persisted GeoContext rather
+// than re-inferring from the slug suffix at tick time.
+func ensureWatchSchemaUpgrades(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(watches)`)
+	if err != nil {
+		return fmt.Errorf("table_info watches: %w", err)
+	}
+	cols := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan table_info watches: %w", err)
+		}
+		cols[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate table_info watches: %w", err)
+	}
+	rows.Close()
+
+	if !cols["location_context"] {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE watches ADD COLUMN location_context TEXT`); err != nil {
+			// A concurrent migrator may have added the column between our
+			// probe and the ALTER. The DB is now in the desired state
+			// regardless of who won; absorb the duplicate-column error.
+			if !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("add column watches.location_context: %w", err)
+			}
+		}
+	}
+	return nil
+}
 
 type watchRow struct {
 	ID           string     `json:"id"`
@@ -54,6 +100,18 @@ type watchRow struct {
 	LastPolledAt *time.Time `json:"last_polled_at,omitempty"`
 	LastMatchAt  *time.Time `json:"last_match_at,omitempty"`
 	MatchCount   int        `json:"match_count"`
+	// LocationResolved is the U8 typed-resolution annotation populated
+	// when the caller passed --location (or legacy --metro) to
+	// `watch add`. The resolution happens at subscription start so the
+	// caller sees the resolved metro immediately; pollOneWatch falls
+	// back to slug-suffix inference at tick time for already-persisted
+	// watches.
+	LocationResolved *LocationResolvedField `json:"location_resolved,omitempty"`
+	// LocationWarning fires at subscription start under MEDIUM tier or
+	// forced-LOW. The watch is created in either case (warn-and-continue,
+	// not refuse), so the row persists with the resolved venue and the
+	// caller can decide whether to cancel.
+	LocationWarning *LocationWarningField `json:"location_warning,omitempty"`
 }
 
 func newWatchCmd(flags *rootFlags) *cobra.Command {
@@ -74,9 +132,12 @@ func newWatchCmd(flags *rootFlags) *cobra.Command {
 
 func newWatchAddCmd(flags *rootFlags) *cobra.Command {
 	var (
-		party  int
-		window string
-		notify string
+		party               int
+		window              string
+		notify              string
+		flagLocation        string
+		flagAcceptAmbiguous bool
+		flagMetro           string
 	)
 	cmd := &cobra.Command{
 		Use:     "add <venue>",
@@ -90,10 +151,42 @@ func newWatchAddCmd(flags *rootFlags) *cobra.Command {
 			if venue == "" || strings.Contains(venue, "__printing_press_invalid__") {
 				return fmt.Errorf("invalid venue: %q (provide a slug like 'alinea' or 'tock:alinea')", args[0])
 			}
+
+			// U8: resolve --location / --metro at subscription start.
+			// On envelope, surface to the caller before persisting — they
+			// need to disambiguate before the watch is meaningful. On
+			// resolution success, decorate the response so the caller
+			// sees the resolved metro inline (warn-and-continue: MEDIUM
+			// tier or forced-LOW writes a location_warning alongside,
+			// but the watch still persists).
+			gc, envelope, locationErr, acceptedAmbiguous := resolveLocationFlags(
+				cmd.ErrOrStderr(),
+				flagLocation,
+				flagMetro,
+				flagAcceptAmbiguous,
+			)
+			if locationErr != nil {
+				return locationErr
+			}
+			if envelope != nil {
+				return printJSONFiltered(cmd.OutOrStdout(), envelope, flags)
+			}
+			resolved, warning := decorateForList(gc, acceptedAmbiguous)
+			// Print the location_warning to stderr at subscription start
+			// so cron-driven follow-ups see it without re-parsing JSON.
+			// Warn-and-continue: never block subscription on ambiguity.
+			if warning != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"location_warning: forced pick %q over alternates %v at subscription start — continuing watch\n",
+					warning.Picked, warning.Alternates)
+			}
+
 			if dryRunOK(flags) {
 				return printJSONFiltered(cmd.OutOrStdout(), watchRow{
 					ID: "watch_dryrun", Venue: args[0], PartySize: party, State: "active",
-					CreatedAt: time.Now().UTC(),
+					CreatedAt:        time.Now().UTC(),
+					LocationResolved: resolved,
+					LocationWarning:  warning,
 				}, flags)
 			}
 			db, err := openWatchStore(flags)
@@ -110,12 +203,25 @@ func newWatchAddCmd(flags *rootFlags) *cobra.Command {
 				ID: id, Venue: args[0], Network: network, Slug: slug,
 				PartySize: party, WindowSpec: window, Notify: notify,
 				State: "active", CreatedAt: time.Now().UTC(),
+				LocationResolved: resolved,
+				LocationWarning:  warning,
+			}
+			// U15: persist the resolved GeoContext as JSON so pollOneWatch
+			// can anchor on it at tick time instead of re-inferring from
+			// the slug suffix (which can drift back to NYC for slugs
+			// without a city suffix). Nil gc → NULL column (preserves the
+			// no-location no-decoration shape for pre-U8 callers).
+			var locationContextJSON sql.NullString
+			if gc != nil {
+				if raw, mErr := json.Marshal(gc); mErr == nil {
+					locationContextJSON = sql.NullString{String: string(raw), Valid: true}
+				}
 			}
 			_, err = db.ExecContext(cmd.Context(),
-				`INSERT INTO watches (id, venue, network, slug, party_size, window_spec, notify, state)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO watches (id, venue, network, slug, party_size, window_spec, notify, state, location_context)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				row.ID, row.Venue, row.Network, row.Slug, row.PartySize,
-				row.WindowSpec, row.Notify, row.State,
+				row.WindowSpec, row.Notify, row.State, locationContextJSON,
 			)
 			if err != nil {
 				return fmt.Errorf("inserting watch: %w", err)
@@ -126,6 +232,20 @@ func newWatchAddCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().IntVar(&party, "party", 2, "Party size")
 	cmd.Flags().StringVar(&window, "window", "", "Time window (e.g., 'sat 7-9pm')")
 	cmd.Flags().StringVar(&notify, "notify", "local", "Notification channel: local, slack, webhook (slack/webhook need extra config)")
+	cmd.Flags().StringVar(&flagLocation, "location", "",
+		"Free-form location: 'bellevue, wa', 'seattle', '47.6,-122.3', or 'seattle metro'. "+
+			"Anchors the OT Autocomplete fallback at tick time and decorates the row "+
+			"with location_resolved. Warn-and-continue under ambiguity — the watch is "+
+			"created with a location_warning rather than refused.")
+	cmd.Flags().BoolVar(&flagAcceptAmbiguous, "batch-accept-ambiguous", false,
+		"BATCH-ONLY escape hatch: when --location is ambiguous, force-pick the top "+
+			"candidate instead of returning a disambiguation envelope. Interactive "+
+			"agents must NOT set this — it defeats the disambiguation contract.")
+	cmd.Flags().StringVar(&flagMetro, "metro", "",
+		"Metro slug (e.g., chicago, seattle). DEPRECATED — use --location <city>. "+
+			"Implicit --batch-accept-ambiguous is canonical-only: a single-hit registry lookup "+
+			"preserves the legacy result shape; ambiguous or unknown values return the standard "+
+			"disambiguation envelope just like --location would.")
 	return cmd
 }
 
@@ -151,7 +271,7 @@ func newWatchListCmd(flags *rootFlags) *cobra.Command {
 				argsSQL = append(argsSQL, stateFilter)
 			}
 			query := `SELECT id, venue, network, slug, party_size, window_spec, notify, state,
-				 created_at, last_polled_at, last_match_at, match_count
+				 created_at, last_polled_at, last_match_at, match_count, location_context
 				 FROM watches ` + where + ` ORDER BY created_at DESC`
 			rows, err := db.QueryContext(cmd.Context(), query, argsSQL...)
 			if err != nil {
@@ -161,11 +281,11 @@ func newWatchListCmd(flags *rootFlags) *cobra.Command {
 			out := []watchRow{}
 			for rows.Next() {
 				var r watchRow
-				var window, notify sql.NullString
+				var window, notify, locationCtx sql.NullString
 				var lastPolled, lastMatch sql.NullTime
 				var created time.Time
 				if err := rows.Scan(&r.ID, &r.Venue, &r.Network, &r.Slug, &r.PartySize,
-					&window, &notify, &r.State, &created, &lastPolled, &lastMatch, &r.MatchCount); err != nil {
+					&window, &notify, &r.State, &created, &lastPolled, &lastMatch, &r.MatchCount, &locationCtx); err != nil {
 					return fmt.Errorf("scan watch: %w", err)
 				}
 				if window.Valid {
@@ -182,6 +302,32 @@ func newWatchListCmd(flags *rootFlags) *cobra.Command {
 				if lastMatch.Valid {
 					t := lastMatch.Time
 					r.LastMatchAt = &t
+				}
+				// U15: rehydrate location_context into the user-facing
+				// LocationResolved annotation. Pre-migration rows (NULL
+				// column) and pre-U8 rows (added before --location
+				// existed) stay back-compat with no decoration. We do
+				// not surface LocationWarning here because the warn-bypass
+				// state was a one-shot at subscription time, not a
+				// persisted contract.
+				//
+				// U19: pass acceptedAmbiguous=true on the rehydration
+				// path so a persisted LOW-tier GeoContext (forced pick
+				// at watch-add time via --batch-accept-ambiguous) still
+				// surfaces location_resolved. The decision was already
+				// made at subscription time; listing is showing what
+				// was decided, not re-deciding. Without this, the LOW
+				// branch in DecorateWithLocationContext returns (nil,
+				// nil) because the (LOW, !bypass) shape is the
+				// envelope path — which doesn't apply once the watch
+				// is persisted. The warning is dropped explicitly here
+				// (same one-shot reasoning as above).
+				if locationCtx.Valid && locationCtx.String != "" {
+					var gc GeoContext
+					if jerr := json.Unmarshal([]byte(locationCtx.String), &gc); jerr == nil {
+						resolved, _ := decorateForList(&gc, true)
+						r.LocationResolved = resolved
+					}
 				}
 				out = append(out, r)
 			}
@@ -257,7 +403,7 @@ func newWatchTickCmd(flags *rootFlags) *cobra.Command {
 			}
 			defer db.Close()
 			rows, err := db.QueryContext(cmd.Context(),
-				`SELECT id, venue, network, slug, party_size, COALESCE(window_spec, '') FROM watches WHERE state = 'active' ORDER BY created_at`)
+				`SELECT id, venue, network, slug, party_size, COALESCE(window_spec, ''), COALESCE(location_context, '') FROM watches WHERE state = 'active' ORDER BY created_at`)
 			if err != nil {
 				return fmt.Errorf("listing active watches: %w", err)
 			}
@@ -270,13 +416,13 @@ func newWatchTickCmd(flags *rootFlags) *cobra.Command {
 			results := []tickResult{}
 			for rows.Next() {
 				var (
-					id, venue, network, slug, windowSpec string
-					party                                int
+					id, venue, network, slug, windowSpec, locationCtx string
+					party                                             int
 				)
-				if err := rows.Scan(&id, &venue, &network, &slug, &party, &windowSpec); err != nil {
+				if err := rows.Scan(&id, &venue, &network, &slug, &party, &windowSpec, &locationCtx); err != nil {
 					return fmt.Errorf("scan watch: %w", err)
 				}
-				r := pollOneWatch(ctx, session, id, venue, network, slug, party, windowSpec, noCache)
+				r := pollOneWatch(ctx, session, id, venue, network, slug, party, windowSpec, locationCtx, noCache)
 				results = append(results, r)
 				now := time.Now().UTC()
 				if r.HasMatch {
@@ -295,7 +441,7 @@ func newWatchTickCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
-func pollOneWatch(ctx context.Context, s *auth.Session, id, venue, network, slug string, party int, windowSpec string, noCache bool) tickResult {
+func pollOneWatch(ctx context.Context, s *auth.Session, id, venue, network, slug string, party int, windowSpec, locationContextJSON string, noCache bool) tickResult {
 	r := tickResult{WatchID: id, Venue: venue, Network: network, PolledAt: time.Now().UTC().Format(time.RFC3339), WindowSpec: windowSpec}
 	tryOT := network == "auto" || network == "opentable"
 	tryTock := network == "auto" || network == "tock"
@@ -362,9 +508,15 @@ func pollOneWatch(ctx context.Context, s *auth.Session, id, venue, network, slug
 		if err == nil {
 			// OT's Autocomplete returns INTERNAL_SERVER_ERROR with lat=0/lng=0
 			// (the upstream `personalizer-autocomplete/v4` requires a coordinate
-			// to anchor on). Default to NYC — same approach earliest.go uses.
-			// The matcher still finds the venue regardless of metro.
-			restID, restName, _, rerr := c.RestaurantIDFromQuery(ctx, slug, 40.7128, -74.0060)
+			// to anchor on). resolveWatchAnchor implements the precedence:
+			// (1) persisted GeoContext from watches.location_context (U15 —
+			// pinned by `watch add --location`); (2) slug-suffix inference
+			// (U8); (3) NYC default. U15 caught Codex P1-E: a slug without a
+			// city suffix and a `--location 'portland, me'` was drifting back
+			// to NYC at tick time because location_context was decorated on
+			// the response but never persisted.
+			anchorLat, anchorLng := resolveWatchAnchor(slug, locationContextJSON)
+			restID, restName, _, rerr := c.RestaurantIDFromQuery(ctx, slug, anchorLat, anchorLng)
 			if rerr == nil && restID != 0 {
 				todayT := time.Now()
 				// Loop one call per day. The new OT GraphQL gateway hardcodes
@@ -445,6 +597,36 @@ func pollOneWatch(ctx context.Context, s *auth.Session, id, venue, network, slug
 	return r
 }
 
+// resolveWatchAnchor returns the (lat, lng) OT Autocomplete should
+// anchor on for a watch at tick time. Precedence:
+//  1. Persisted location_context JSON (U15) — unmarshaled to a
+//     *GeoContext and its centroid used. Pinned by `watch add
+//     --location` so an explicit caller intent survives across ticks
+//     even when the slug carries no city suffix.
+//  2. Slug-suffix inference via inferGeoContextFromSlug (U8) — covers
+//     pre-migration rows and watches added without --location, but
+//     only fires for slugs like `joey-bellevue` that carry a hint.
+//  3. NYC default (40.7128, -74.0060) — final fallback for slugs with
+//     no recognizable city suffix and no persisted location.
+//
+// Defensive: a malformed locationContextJSON blob falls through to (2)
+// rather than erroring. The on-disk shape may change over time; a tick
+// should never break because a row was written by a future binary.
+func resolveWatchAnchor(slug, locationContextJSON string) (lat, lng float64) {
+	if locationContextJSON != "" {
+		var gc GeoContext
+		if err := json.Unmarshal([]byte(locationContextJSON), &gc); err == nil {
+			if gc.Centroid[0] != 0 || gc.Centroid[1] != 0 {
+				return gc.Centroid[0], gc.Centroid[1]
+			}
+		}
+	}
+	if gc := inferGeoContextFromSlug(slug); gc != nil {
+		return gc.Centroid[0], gc.Centroid[1]
+	}
+	return 40.7128, -74.0060
+}
+
 func openWatchStore(flags *rootFlags) (*sql.DB, error) {
 	dbPath := defaultDBPath("table-reservation-goat-pp-cli")
 	db, err := store.OpenWithContext(context.Background(), dbPath)
@@ -454,6 +636,14 @@ func openWatchStore(flags *rootFlags) (*sql.DB, error) {
 	if _, err := db.DB().ExecContext(context.Background(), watchSchemaSQL); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ensuring watches schema: %w", err)
+	}
+	// Upgrade existing tables that predate columns added by newer
+	// binaries (U15 added location_context). CREATE TABLE IF NOT EXISTS
+	// is a no-op when the table already exists, so the additive column
+	// only lands via ALTER TABLE here.
+	if err := ensureWatchSchemaUpgrades(context.Background(), db.DB()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("upgrading watches schema: %w", err)
 	}
 	// Returning the raw *sql.DB keeps watch SQL self-contained. The Store
 	// wrapper lifecycle (Close) is shed because the only resource it owns is
