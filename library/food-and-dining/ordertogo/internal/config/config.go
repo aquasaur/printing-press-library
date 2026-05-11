@@ -29,7 +29,15 @@ type Config struct {
 	DefaultRestaurant string            `toml:"default_restaurant"`
 	DefaultMax        float64           `toml:"default_max"`
 	DefaultTipPct     float64           `toml:"default_tip_pct"`
-	Path              string            `toml:"-"`
+	// PATCH: Stripe payment fields used by the postmicmeshorder checkout flow.
+	// Populate via `config set stripe_customer_id <id>` and `config set
+	// stripe_default_card <key>` once; values are stable per-account.
+	StripeCustomerID  string `toml:"stripe_customer_id"`
+	StripeDefaultCard string `toml:"stripe_default_card"`
+	CustomerFirstName string `toml:"customer_firstname"`
+	CustomerLastName  string `toml:"customer_lastname"`
+	CustomerPhone     string `toml:"customer_phone"`
+	Path              string `toml:"-"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -191,6 +199,17 @@ func (c *Config) SetKey(key, value string) error {
 			return err
 		}
 		c.DefaultTipPct = v
+	// PATCH: payment + customer fields for the postmicmeshorder checkout flow.
+	case "stripe_customer_id":
+		c.StripeCustomerID = value
+	case "stripe_default_card":
+		c.StripeDefaultCard = value
+	case "customer_firstname":
+		c.CustomerFirstName = value
+	case "customer_lastname":
+		c.CustomerLastName = value
+	case "customer_phone":
+		c.CustomerPhone = value
 	default:
 		return fmt.Errorf("unsupported config key %q", key)
 	}
