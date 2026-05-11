@@ -147,6 +147,27 @@
       }
     },
     {
+      "name": "arxiv",
+      "category": "other",
+      "api": "arXiv",
+      "description": "Public Atom API for searching and fetching arXiv e-print metadata.",
+      "path": "library/other/arxiv",
+      "printer": "hnshah",
+      "printer_name": "Hiten Shah",
+      "mcp": {
+        "binary": "arxiv-pp-mcp",
+        "transports": [
+          "stdio"
+        ],
+        "tool_count": 1,
+        "public_tool_count": 1,
+        "auth_type": "none",
+        "env_vars": [],
+        "mcp_ready": "full",
+        "spec_format": "openapi3"
+      }
+    },
+    {
       "name": "cal-com",
       "category": "productivity",
       "api": "Cal.com",
@@ -932,6 +953,28 @@
         "env_vars": [],
         "mcp_ready": "full",
         "spec_format": "internal"
+      }
+    },
+    {
+      "name": "openalex",
+      "category": "other",
+      "api": "OpenAlex",
+      "description": "The OpenAlex API provides access to a comprehensive catalog of scholarly works, authors, sources, institutions,...",
+      "path": "library/other/openalex",
+      "printer": "hiten-shah",
+      "printer_name": "Hiten Shah",
+      "mcp": {
+        "binary": "openalex-pp-mcp",
+        "transports": [
+          "stdio"
+        ],
+        "tool_count": 43,
+        "public_tool_count": 0,
+        "auth_type": "api_key",
+        "env_vars": [
+          "OPENALEX_API_KEY"
+        ],
+        "mcp_ready": "full"
       }
     },
     {
