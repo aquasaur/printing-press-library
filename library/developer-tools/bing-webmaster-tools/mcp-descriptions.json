@@ -1,0 +1,7 @@
+{
+  "descriptions": {
+    "links_remove-connected": "Remove a connected page previously registered for a site via links_add-connected. Required body params: siteUrl (the verified site) and masterUrl (the connected page's URL). Returns no payload on success — confirm with links_connected, which lists the remaining connected pages. Use this to undo a connected-page registration; it does not affect normal inbound links reported by links_counts.",
+    "page-preview_remove": "Remove a page-preview (rich-snippet) block for a site, re-enabling Bing rich snippets for the matching URLs. Required body params: siteUrl (the verified site) and url (the exact URL or pattern that was blocked). Returns no payload on success — confirm with page-preview_list, which shows the remaining blocks. Use page-preview_add to create a block; use this to lift one.",
+    "sites_verify": "Trigger Bing's ownership-verification check for a site already added to your account with sites_add. Required body param: siteUrl. Bing re-checks the verification proof (meta tag, XML file, or DNS record) you placed; returns no payload on success. Call this after publishing the verification proof, or to re-verify a site whose ownership lapsed. Check the result with sites_list (verified sites only) or sites_get-roles."
+  }
+}

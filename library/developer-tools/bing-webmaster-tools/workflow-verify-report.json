@@ -1,0 +1,8 @@
+{
+  "dir": "/Users/cameronbailey/printing-press/.runstate/cli-printing-press-f1560aab/runs/20260511-210547/working/bing-webmaster-tools-pp-cli",
+  "workflows": null,
+  "verdict": "workflow-pass",
+  "issues": [
+    "no workflow manifest found, skipping"
+  ]
+}

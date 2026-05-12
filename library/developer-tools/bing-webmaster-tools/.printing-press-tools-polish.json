@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-05-11T11:38:10.462299Z",
+  "cli_dir": "/Users/cameronbailey/printing-press/.runstate/cli-printing-press-f1560aab/runs/20260511-210547/working/bing-webmaster-tools-pp-cli",
+  "findings": null,
+  "scorecard_before": {
+    "mcp_description_quality": 7,
+    "captured": "2026-05-11T11:35:53.309471Z"
+  }
+}

@@ -1,0 +1,275 @@
+{
+  "api_name": "bing-webmaster-tools",
+  "novelty_score": 0,
+  "alternatives": [
+    {
+      "name": "mcp-server-bing-webmaster",
+      "url": "https://github.com/isiahw1/mcp-server-bing-webmaster",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 40,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "bing-webmaster-tools (merj)",
+      "url": "https://github.com/merj/bing-webmaster-tools",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 40,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "bing_webmaster_cli",
+      "url": "https://github.com/NmadeleiDev/bing_webmaster_cli",
+      "language": "Go",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 6,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "bing-webmaster-api (seo-meow)",
+      "url": "https://github.com/seo-meow/bing-webmaster-api",
+      "language": "Rust",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 40,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "bing-webmaster-api (webjeyros)",
+      "url": "https://github.com/webjeyros/bing-webmaster-api",
+      "language": "PHP",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 30,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "bing-webmastertools-python (charlesnagy)",
+      "url": "https://github.com/charlesnagy/bing-webmastertools-python",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 20,
+      "has_json_output": false,
+      "has_auth_support": false
+    }
+  ],
+  "gaps": [],
+  "patterns": [],
+  "recommendation": "proceed",
+  "researched_at": "2026-05-11T21:09:30Z",
+  "novel_features": [
+    {
+      "name": "Site health snapshot",
+      "command": "sites health",
+      "description": "One scored summary of a site's Bing health: traffic, crawl stats, top crawl issues, inbound links, and URL-submission quota — in a single command.",
+      "rationale": "No single Bing Webmaster API call returns this; it joins five endpoints and decodes the opaque crawl-issue bitflags into the verdict.",
+      "example": "bing-webmaster-tools-pp-cli sites health --site-url https://navryn.com --agent",
+      "why_it_matters": "Reach for this first when an agent needs a one-shot read on how a site is doing in Bing, instead of chaining five raw endpoint calls.",
+      "group": "Composite views over the Bing API"
+    },
+    {
+      "name": "All-sites triage board",
+      "command": "sites triage",
+      "description": "Ranks every verified site in your account worst-first by crawl-issue count and traffic, one row per site.",
+      "rationale": "There is no cross-site endpoint — this is the account-wide 'what needs attention' view.",
+      "example": "bing-webmaster-tools-pp-cli sites triage --agent",
+      "why_it_matters": "For agencies or anyone with many sites: one call answers 'which of my sites needs attention' without a login per site.",
+      "group": "Composite views over the Bing API"
+    },
+    {
+      "name": "CTR-opportunity finder",
+      "command": "traffic ctr-gaps",
+      "description": "Surfaces queries with high impressions but low click-through, ranked by estimated lost clicks.",
+      "rationale": "The Bing API returns raw query stats; the expected-CTR curve and the lost-click ranking are computed by the CLI.",
+      "example": "bing-webmaster-tools-pp-cli traffic ctr-gaps --site-url https://navryn.com --min-impressions 100 --agent",
+      "why_it_matters": "Points an agent straight at the title/meta-description rewrites most likely to recover Bing clicks.",
+      "group": "Search-performance analytics"
+    },
+    {
+      "name": "Keyword cannibalization detector",
+      "command": "keywords cannibalization",
+      "description": "Finds queries where two or more of your own pages both rank in Bing, ranked by the impression cost of the split.",
+      "rationale": "Requires grouping the query×page rows by query — no single Bing endpoint returns pages-per-query.",
+      "example": "bing-webmaster-tools-pp-cli keywords cannibalization --site-url https://navryn.com --agent",
+      "why_it_matters": "Run before briefing new content so an agent doesn't create a page that competes with one that already ranks.",
+      "group": "Search-performance analytics"
+    },
+    {
+      "name": "Quota-aware batch submit",
+      "command": "submit smart",
+      "description": "Checks the remaining daily URL-submission quota, submits only up to that allowance, records every submission to the local store with a timestamp, and exits non-zero if any URL was dropped.",
+      "rationale": "Wraps the quota endpoint plus batch submit plus a local ledger plus a typed exit code — the quota arithmetic and the dropped-URL CI signal don't exist anywhere else.",
+      "example": "bing-webmaster-tools-pp-cli submit smart --site-url https://navryn.com --file changed-urls.txt --agent",
+      "why_it_matters": "Safe to wire into a deploy pipeline: it never over-submits and the exit code tells CI when the day's quota ran out.",
+      "group": "Agent-native plumbing"
+    },
+    {
+      "name": "Crawl-issue triage",
+      "command": "crawl triage",
+      "description": "Decodes Bing's crawl-issue bitflags into plain-English categories, groups by category, and joins to page traffic so high-traffic broken pages rank first.",
+      "rationale": "GetCrawlIssues returns opaque flags; the decoding plus traffic-weighting plus grouping is net-new on top of the raw endpoint.",
+      "example": "bing-webmaster-tools-pp-cli crawl triage --site-url https://navryn.com --agent",
+      "why_it_matters": "Tells an agent which crawl errors actually matter — the ones on pages people land on — instead of a flat error dump.",
+      "group": "Composite views over the Bing API"
+    }
+  ],
+  "novel_features_built": [
+    {
+      "name": "Site health snapshot",
+      "command": "sites health",
+      "description": "One scored summary of a site's Bing health: traffic, crawl stats, top crawl issues, inbound links, and URL-submission quota — in a single command.",
+      "rationale": "No single Bing Webmaster API call returns this; it joins five endpoints and decodes the opaque crawl-issue bitflags into the verdict.",
+      "example": "bing-webmaster-tools-pp-cli sites health --site-url https://navryn.com --agent",
+      "why_it_matters": "Reach for this first when an agent needs a one-shot read on how a site is doing in Bing, instead of chaining five raw endpoint calls.",
+      "group": "Composite views over the Bing API"
+    },
+    {
+      "name": "All-sites triage board",
+      "command": "sites triage",
+      "description": "Ranks every verified site in your account worst-first by crawl-issue count and traffic, one row per site.",
+      "rationale": "There is no cross-site endpoint — this is the account-wide 'what needs attention' view.",
+      "example": "bing-webmaster-tools-pp-cli sites triage --agent",
+      "why_it_matters": "For agencies or anyone with many sites: one call answers 'which of my sites needs attention' without a login per site.",
+      "group": "Composite views over the Bing API"
+    },
+    {
+      "name": "CTR-opportunity finder",
+      "command": "traffic ctr-gaps",
+      "description": "Surfaces queries with high impressions but low click-through, ranked by estimated lost clicks.",
+      "rationale": "The Bing API returns raw query stats; the expected-CTR curve and the lost-click ranking are computed by the CLI.",
+      "example": "bing-webmaster-tools-pp-cli traffic ctr-gaps --site-url https://navryn.com --min-impressions 100 --agent",
+      "why_it_matters": "Points an agent straight at the title/meta-description rewrites most likely to recover Bing clicks.",
+      "group": "Search-performance analytics"
+    },
+    {
+      "name": "Keyword cannibalization detector",
+      "command": "keywords cannibalization",
+      "description": "Finds queries where two or more of your own pages both rank in Bing, ranked by the impression cost of the split.",
+      "rationale": "Requires grouping the query×page rows by query — no single Bing endpoint returns pages-per-query.",
+      "example": "bing-webmaster-tools-pp-cli keywords cannibalization --site-url https://navryn.com --agent",
+      "why_it_matters": "Run before briefing new content so an agent doesn't create a page that competes with one that already ranks.",
+      "group": "Search-performance analytics"
+    },
+    {
+      "name": "Quota-aware batch submit",
+      "command": "submit smart",
+      "description": "Checks the remaining daily URL-submission quota, submits only up to that allowance, records every submission to the local store with a timestamp, and exits non-zero if any URL was dropped.",
+      "rationale": "Wraps the quota endpoint plus batch submit plus a local ledger plus a typed exit code — the quota arithmetic and the dropped-URL CI signal don't exist anywhere else.",
+      "example": "bing-webmaster-tools-pp-cli submit smart --site-url https://navryn.com --file changed-urls.txt --agent",
+      "why_it_matters": "Safe to wire into a deploy pipeline: it never over-submits and the exit code tells CI when the day's quota ran out.",
+      "group": "Agent-native plumbing"
+    },
+    {
+      "name": "Crawl-issue triage",
+      "command": "crawl triage",
+      "description": "Decodes Bing's crawl-issue bitflags into plain-English categories, groups by category, and joins to page traffic so high-traffic broken pages rank first.",
+      "rationale": "GetCrawlIssues returns opaque flags; the decoding plus traffic-weighting plus grouping is net-new on top of the raw endpoint.",
+      "example": "bing-webmaster-tools-pp-cli crawl triage --site-url https://navryn.com --agent",
+      "why_it_matters": "Tells an agent which crawl errors actually matter — the ones on pages people land on — instead of a flat error dump.",
+      "group": "Composite views over the Bing API"
+    }
+  ],
+  "narrative": {
+    "display_name": "Bing Webmaster Tools",
+    "headline": "Every Bing Webmaster Tools API method, plus a local store, offline search, and SEO analytics no other Bing tool has — built agent-native.",
+    "value_prop": "Bing Webmaster Tools has no official spec and no first-party CLI. This wraps the whole documented API surface — sites, sitemaps, URL and content submission, traffic and query stats, crawl control, inbound links, keyword research, and per-site config — then adds analytics commands the API itself doesn't expose: `sites health` (a scored five-endpoint summary), `sites triage` (worst-first across every site), `traffic ctr-gaps` (high-impression / low-CTR queries by estimated lost clicks), `keywords cannibalization` (queries where two of your pages compete), `crawl triage` (decoded crawl issues weighted by traffic), and `submit smart` (quota-aware batch submission with a local ledger and a CI exit code). Synced data (`sync`) and submission history land in a local SQLite store you can query with `search` and `sql`.",
+    "auth_narrative": "Auth is a single API key — open the Bing Webmaster Tools dashboard, go to Settings → API access, generate a key, and set `BING_WEBMASTER_API_KEY`. The key is passed as the `apikey` query parameter on every call. Run `doctor` to confirm it is valid and the API is reachable.",
+    "quickstart": [
+      {
+        "command": "bing-webmaster-tools-pp-cli doctor",
+        "comment": "Confirm BING_WEBMASTER_API_KEY is set and ssl.bing.com is reachable."
+      },
+      {
+        "command": "bing-webmaster-tools-pp-cli sites list",
+        "comment": "List the sites in your account — you need the site URL for everything below."
+      },
+      {
+        "command": "bing-webmaster-tools-pp-cli sites health --site-url https://navryn.com",
+        "comment": "One scored summary: traffic, crawl, top issues, links, quota."
+      },
+      {
+        "command": "bing-webmaster-tools-pp-cli traffic ctr-gaps --site-url https://navryn.com --min-impressions 100",
+        "comment": "Find the high-impression / low-CTR queries worth a title rewrite."
+      },
+      {
+        "command": "bing-webmaster-tools-pp-cli url check https://navryn.com/pricing",
+        "comment": "Is this URL indexed by Bing — and if not, what's the crawl reason?"
+      },
+      {
+        "command": "bing-webmaster-tools-pp-cli submit smart --site-url https://navryn.com --file changed-urls.txt",
+        "comment": "Submit changed URLs for indexing without blowing the daily quota."
+      }
+    ],
+    "troubleshoots": [
+      {
+        "symptom": "`ERROR!!! InvalidApiKey` or HTTP 400 on every call",
+        "fix": "Your apikey is wrong or missing — copy it again from the dashboard's Settings → API access page and re-export BING_WEBMASTER_API_KEY."
+      },
+      {
+        "symptom": "`submit url` fails with a quota error",
+        "fix": "Run `submit quota --site-url \u003csite\u003e` to see the remaining daily allowance; new accounts often get ~10/day. Use `submit smart` to stay under it, or switch real-time submission to IndexNow."
+      },
+      {
+        "symptom": "`search` or `sql` returns nothing",
+        "fix": "Run `sync` first — those commands read the local store, which starts empty. Note that stat resources require a site URL, so `sync` only populates the account-wide tables (sites) plus anything `submit smart` has recorded."
+      },
+      {
+        "symptom": "Dates in `--json` look like `/Date(1714...)/`",
+        "fix": "The CLI normalizes Bing's legacy WCF dates to ISO-8601 in its output; if you see the raw form you're reading ssl.bing.com directly rather than through this CLI."
+      }
+    ],
+    "when_to_use": "Use this CLI when an agent or operator needs to read or manage a site's presence in Bing search — pulling query and page performance, checking whether URLs are indexed and why, submitting URLs or sitemaps within quota, reviewing and triaging crawl errors, doing Bing keyword research, or auditing per-site crawl/blocking/geo config. Prefer it over a raw HTTP call when you want the decoded crawl-issue categories, the analytics commands, or a JSON shape that's already unwrapped from Bing's `{\"d\":...}` envelope.",
+    "recipes": [
+      {
+        "title": "Site health in one call",
+        "command": "bing-webmaster-tools-pp-cli sites health --site-url https://navryn.com --agent",
+        "explanation": "Joins traffic, crawl stats, crawl issues, link counts, and submission quota into one scored report."
+      },
+      {
+        "title": "Find Bing CTR opportunities",
+        "command": "bing-webmaster-tools-pp-cli traffic ctr-gaps --site-url https://navryn.com --min-impressions 100 --agent",
+        "explanation": "Lists queries getting impressions but few clicks, ranked by estimated lost clicks — your title-rewrite worklist."
+      },
+      {
+        "title": "Is this URL indexed and why not",
+        "command": "bing-webmaster-tools-pp-cli url check https://navryn.com/pricing --json",
+        "explanation": "Joins GetUrlInfo with GetCrawlIssues and decodes the issue flags into a plain-English reason."
+      },
+      {
+        "title": "Catch keyword cannibalization with a narrow payload",
+        "command": "bing-webmaster-tools-pp-cli keywords cannibalization --site-url https://navryn.com --agent --select query,pageCount,totalImpressions,pages.page,pages.impressions",
+        "explanation": "Finds queries where two of your pages both rank; the dotted --select keeps the agent payload to just the fields that matter."
+      },
+      {
+        "title": "Post-deploy index push for CI",
+        "command": "bing-webmaster-tools-pp-cli submit smart --site-url https://navryn.com --file changed-urls.txt --agent",
+        "explanation": "Submits the changed URLs up to the remaining daily quota; non-zero exit if any were dropped, so the pipeline flags it."
+      }
+    ],
+    "trigger_phrases": [
+      "check bing search performance for my site",
+      "is this url indexed by bing",
+      "submit urls to bing for indexing",
+      "bing keyword research",
+      "review bing crawl errors",
+      "use bing-webmaster-tools",
+      "run bing-webmaster-tools"
+    ]
+  }
+}

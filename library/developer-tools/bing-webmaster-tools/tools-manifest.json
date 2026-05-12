@@ -1,0 +1,1213 @@
+{
+  "api_name": "bing-webmaster-tools",
+  "base_url": "https://ssl.bing.com/webmaster/api.svc/json",
+  "description": "Bing Webmaster Tools API CLI — sites, sitemaps, URL \u0026 content submission, traffic \u0026 query stats, crawl control, links, keyword research, and per-site config, with a local store and offline search.",
+  "mcp_ready": "full",
+  "http_transport": "standard",
+  "auth": {
+    "type": "api_key",
+    "header": "apikey",
+    "in": "query",
+    "env_vars": [
+      "BING_WEBMASTER_API_KEY"
+    ],
+    "env_var_specs": [
+      {
+        "name": "BING_WEBMASTER_API_KEY",
+        "kind": "per_call",
+        "required": true,
+        "sensitive": true,
+        "inferred": true
+      }
+    ],
+    "key_url": "https://www.bing.com/webmasters/"
+  },
+  "required_headers": [],
+  "tools": [
+    {
+      "name": "block-urls_add",
+      "description": "Block a URL or directory from Bing's index. Required: siteUrl, blockedUrl. Optional: entityType, requestType.",
+      "method": "POST",
+      "path": "/AddBlockedUrl",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "blockedUrl",
+          "type": "string",
+          "location": "body",
+          "description": "URL or directory to block",
+          "required": true
+        },
+        {
+          "name": "entityType",
+          "type": "string",
+          "location": "body",
+          "description": "Block scope: Page or Directory"
+        },
+        {
+          "name": "requestType",
+          "type": "string",
+          "location": "body",
+          "description": "Block type: FullRemoval or CacheRemoval"
+        }
+      ]
+    },
+    {
+      "name": "block-urls_list",
+      "description": "List URLs/directories blocked from Bing's index for a site. Required: siteUrl. Returns array of BlockedUrl.",
+      "method": "GET",
+      "path": "/GetBlockedUrls",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "block-urls_remove",
+      "description": "Unblock a previously blocked URL or directory. Required: siteUrl, blockedUrl. Optional: entityType, requestType.",
+      "method": "POST",
+      "path": "/RemoveBlockedUrl",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "blockedUrl",
+          "type": "string",
+          "location": "body",
+          "description": "URL or directory to unblock",
+          "required": true
+        },
+        {
+          "name": "entityType",
+          "type": "string",
+          "location": "body",
+          "description": "Block scope: Page or Directory"
+        },
+        {
+          "name": "requestType",
+          "type": "string",
+          "location": "body",
+          "description": "Block type: FullRemoval or CacheRemoval"
+        }
+      ]
+    },
+    {
+      "name": "crawl_get-settings",
+      "description": "Get the crawl settings for a site. Required: siteUrl. Returns the CrawlSettings.",
+      "method": "GET",
+      "path": "/GetCrawlSettings",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "crawl_issues",
+      "description": "Get crawl issues/errors for a site. Required: siteUrl. Returns array of CrawlIssue.",
+      "method": "GET",
+      "path": "/GetCrawlIssues",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "crawl_set-settings",
+      "description": "Update the crawl settings for a site. Required: siteUrl, crawlSettings.",
+      "method": "POST",
+      "path": "/SaveCrawlSettings",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "crawlSettings",
+          "type": "string",
+          "location": "body",
+          "description": "Crawl settings payload (JSON describing crawl rate and per-hour limits)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "crawl_stats",
+      "description": "Get crawl statistics (crawled pages, in-index, errors) by day for a site. Required: siteUrl. Returns array of CrawlStat.",
+      "method": "GET",
+      "path": "/GetCrawlStats",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "deep-links_add",
+      "description": "Block deep links for a URL pattern. Required: siteUrl, searchUrl. Optional: market, deepLink.",
+      "method": "POST",
+      "path": "/AddDeepLinkBlock",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "market",
+          "type": "string",
+          "location": "body",
+          "description": "Market the block applies to"
+        },
+        {
+          "name": "searchUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Search-result URL pattern",
+          "required": true
+        },
+        {
+          "name": "deepLink",
+          "type": "string",
+          "location": "body",
+          "description": "Deep link to block"
+        }
+      ]
+    },
+    {
+      "name": "deep-links_list",
+      "description": "List blocked deep links for a site. Required: siteUrl. Returns array of DeepLinkBlock.",
+      "method": "GET",
+      "path": "/GetDeepLinkBlocks",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "deep-links_remove",
+      "description": "Remove a deep-link block. Required: siteUrl, searchUrl. Optional: market, deepLink.",
+      "method": "POST",
+      "path": "/RemoveDeepLinkBlock",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "market",
+          "type": "string",
+          "location": "body",
+          "description": "Market"
+        },
+        {
+          "name": "searchUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Search-result URL pattern",
+          "required": true
+        },
+        {
+          "name": "deepLink",
+          "type": "string",
+          "location": "body",
+          "description": "Deep link"
+        }
+      ]
+    },
+    {
+      "name": "feeds_list",
+      "description": "List sitemaps and feeds submitted for a site. Required: siteUrl. Returns array of Feed.",
+      "method": "GET",
+      "path": "/GetFeeds",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "feeds_remove",
+      "description": "Remove a previously submitted sitemap or feed. Required: siteUrl, feedUrl.",
+      "method": "POST",
+      "path": "/RemoveFeed",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "feedUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Sitemap or feed URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "feeds_submit",
+      "description": "Submit a sitemap or feed URL for a site. Required: siteUrl, feedUrl.",
+      "method": "POST",
+      "path": "/SubmitFeed",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "feedUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Sitemap or feed URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "fetch_get",
+      "description": "Get the fetch-as-Bingbot details for a specific URL. Required: siteUrl, url. Returns the FetchedUrlDetails.",
+      "method": "GET",
+      "path": "/GetFetchedUrlDetails",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "query",
+          "description": "URL that was fetched",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "fetch_list",
+      "description": "List URLs fetched as Bingbot for a site. Required: siteUrl. Returns array of FetchedUrl.",
+      "method": "GET",
+      "path": "/GetFetchedUrls",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "fetch_url",
+      "description": "Queue a URL to be fetched as Bingbot. Required: siteUrl, url.",
+      "method": "POST",
+      "path": "/FetchUrl",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "body",
+          "description": "URL to fetch",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "geo_add",
+      "description": "Add a country/region targeting setting. Required: siteUrl, url, twoLetterISOCountryName.",
+      "method": "POST",
+      "path": "/AddCountryRegionSettings",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "body",
+          "description": "URL or directory the targeting applies to",
+          "required": true
+        },
+        {
+          "name": "twoLetterISOCountryName",
+          "type": "string",
+          "location": "body",
+          "description": "Two-letter ISO country code to target",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "geo_list",
+      "description": "Get country/region targeting settings for a site (may require elevated account permissions). Required: siteUrl. Returns array of CountryRegionSetting.",
+      "method": "GET",
+      "path": "/GetCountryRegionSettings",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "geo_remove",
+      "description": "Remove a country/region targeting setting. Required: siteUrl, url, twoLetterISOCountryName.",
+      "method": "POST",
+      "path": "/RemoveCountryRegionSettings",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "body",
+          "description": "URL or directory",
+          "required": true
+        },
+        {
+          "name": "twoLetterISOCountryName",
+          "type": "string",
+          "location": "body",
+          "description": "Two-letter ISO country code",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "keywords_data",
+      "description": "Get keyword data (impressions, broad/exact match counts) for a keyword. Required: keyword. Optional: country, language. Returns the Keyword.",
+      "method": "GET",
+      "path": "/GetKeyword",
+      "params": [
+        {
+          "name": "keyword",
+          "wire_name": "q",
+          "type": "string",
+          "location": "query",
+          "description": "Keyword to look up",
+          "required": true,
+          "aliases": [
+            "q"
+          ]
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "location": "query",
+          "description": "Two-letter country code"
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "location": "query",
+          "description": "Language code (e.g. en-US)"
+        }
+      ]
+    },
+    {
+      "name": "keywords_related",
+      "description": "Get keywords related to a seed keyword. Required: keyword. Optional: country, language. Returns array of RelatedKeyword.",
+      "method": "GET",
+      "path": "/GetRelatedKeywords",
+      "params": [
+        {
+          "name": "keyword",
+          "wire_name": "q",
+          "type": "string",
+          "location": "query",
+          "description": "Seed keyword",
+          "required": true,
+          "aliases": [
+            "q"
+          ]
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "location": "query",
+          "description": "Two-letter country code"
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "location": "query",
+          "description": "Language code (e.g. en-US)"
+        }
+      ]
+    },
+    {
+      "name": "keywords_stats",
+      "description": "Get historical impression stats for a keyword. Required: keyword. Optional: country, language. Returns array of KeywordStat.",
+      "method": "GET",
+      "path": "/GetKeywordStats",
+      "params": [
+        {
+          "name": "keyword",
+          "wire_name": "q",
+          "type": "string",
+          "location": "query",
+          "description": "Keyword to look up",
+          "required": true,
+          "aliases": [
+            "q"
+          ]
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "location": "query",
+          "description": "Two-letter country code"
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "location": "query",
+          "description": "Language code (e.g. en-US)"
+        }
+      ]
+    },
+    {
+      "name": "links_add-connected",
+      "description": "Add a page that links to your website. Required: siteUrl, masterUrl.",
+      "method": "POST",
+      "path": "/AddConnectedPage",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "masterUrl",
+          "type": "string",
+          "location": "body",
+          "description": "URL of the connected page",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "links_connected",
+      "description": "List pages connected to a site (e.g. social profiles, related domains). Required: siteUrl. Returns array of ConnectedPage.",
+      "method": "GET",
+      "path": "/GetConnectedPages",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "links_counts",
+      "description": "Get inbound link counts for a site. Required: siteUrl. Optional: page. Returns array of LinkCount.",
+      "method": "GET",
+      "path": "/GetLinkCounts",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "page",
+          "type": "int",
+          "location": "query",
+          "description": "Page index for paginated link results"
+        }
+      ]
+    },
+    {
+      "name": "links_remove-connected",
+      "description": "Remove a connected page. Required: siteUrl, masterUrl.",
+      "method": "POST",
+      "path": "/RemoveConnectedPage",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "masterUrl",
+          "type": "string",
+          "location": "body",
+          "description": "URL of the connected page",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "links_url",
+      "description": "Get inbound links for a specific site URL. Required: siteUrl, link. Optional: page. Returns array of UrlLink.",
+      "method": "GET",
+      "path": "/GetUrlLinks",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "link",
+          "type": "string",
+          "location": "query",
+          "description": "Target URL to get inbound links for",
+          "required": true
+        },
+        {
+          "name": "page",
+          "type": "int",
+          "location": "query",
+          "description": "Page index for paginated link results"
+        }
+      ]
+    },
+    {
+      "name": "page-preview_add",
+      "description": "Add a page-preview block to prevent rich snippets for a URL pattern. Required: siteUrl, url. Optional: pagePreviewRegion.",
+      "method": "POST",
+      "path": "/AddPagePreviewBlock",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "body",
+          "description": "URL or pattern to block previews for",
+          "required": true
+        },
+        {
+          "name": "pagePreviewRegion",
+          "type": "string",
+          "location": "body",
+          "description": "Region/market the block applies to"
+        }
+      ]
+    },
+    {
+      "name": "page-preview_list",
+      "description": "List active page-preview blocks for a site. Required: siteUrl. Returns array of PagePreviewBlock.",
+      "method": "GET",
+      "path": "/GetActivePagePreviewBlocks",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "page-preview_remove",
+      "description": "Remove a page-preview block. Required: siteUrl, url.",
+      "method": "POST",
+      "path": "/RemovePagePreviewBlock",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "body",
+          "description": "URL or pattern",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "query-params_add",
+      "description": "Add a URL query-parameter normalization rule. Required: siteUrl, queryParameter.",
+      "method": "POST",
+      "path": "/AddQueryParameter",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "queryParameter",
+          "type": "string",
+          "location": "body",
+          "description": "Query parameter name to normalize",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "query-params_list",
+      "description": "List URL query-parameter normalization rules for a site (may require elevated account permissions). Required: siteUrl. Returns array of QueryParameter.",
+      "method": "GET",
+      "path": "/GetQueryParameters",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "query-params_remove",
+      "description": "Remove a URL query-parameter normalization rule. Required: siteUrl, queryParameter.",
+      "method": "POST",
+      "path": "/RemoveQueryParameter",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "queryParameter",
+          "type": "string",
+          "location": "body",
+          "description": "Query parameter name",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "sites_add",
+      "description": "Add a new site to your account. Required: siteUrl.",
+      "method": "POST",
+      "path": "/AddSite",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL to add (e.g. https://example.com)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "sites_add-child",
+      "description": "Add a child site under a parent site. Required: siteUrl, childUrl.",
+      "method": "POST",
+      "path": "/AddChildSite",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Parent site URL",
+          "required": true
+        },
+        {
+          "name": "childUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Child site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "sites_add-role",
+      "description": "Delegate site access to another user. Required: siteUrl. Optional: delegatedSiteUrl, email.",
+      "method": "POST",
+      "path": "/AddSiteRoles",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "delegatedSiteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Delegated site URL (when delegating a sub-site)"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "location": "body",
+          "description": "Email of the user to grant access"
+        }
+      ]
+    },
+    {
+      "name": "sites_children",
+      "description": "Get info about child sites under a parent site. Required: siteUrl. Returns array of ChildSite.",
+      "method": "GET",
+      "path": "/GetChildSitesInfo",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Parent site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "sites_get-roles",
+      "description": "List users who have access to a site. Required: siteUrl. Returns array of SiteRole.",
+      "method": "GET",
+      "path": "/GetSiteRoles",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "sites_list",
+      "description": "List all sites registered with your Bing Webmaster Tools account. Returns array of Site.",
+      "method": "GET",
+      "path": "/GetUserSites",
+      "params": []
+    },
+    {
+      "name": "sites_moves",
+      "description": "Get the site-move notifications submitted for a site. Required: siteUrl. Returns array of SiteMove.",
+      "method": "GET",
+      "path": "/GetSiteMoves",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "sites_remove",
+      "description": "Remove a site from your account. Required: siteUrl.",
+      "method": "POST",
+      "path": "/RemoveSite",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL to remove",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "sites_remove-role",
+      "description": "Revoke a user's site access. Required: siteUrl. Optional: delegatedSiteUrl.",
+      "method": "POST",
+      "path": "/RemoveSiteRole",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "delegatedSiteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Delegated site URL"
+        }
+      ]
+    },
+    {
+      "name": "sites_submit-move",
+      "description": "Notify Bing of a site move. Required: siteUrl. Optional: info.",
+      "method": "POST",
+      "path": "/SubmitSiteMove",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Old site URL",
+          "required": true
+        },
+        {
+          "name": "info",
+          "type": "string",
+          "location": "body",
+          "description": "Site-move info (JSON payload describing source/target and date)"
+        }
+      ]
+    },
+    {
+      "name": "sites_verify",
+      "description": "Verify ownership of a site. Required: siteUrl.",
+      "method": "POST",
+      "path": "/VerifySite",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL to verify",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "submit_batch",
+      "description": "Submit multiple URLs for indexing in one call. Required: siteUrl, urlList.",
+      "method": "POST",
+      "path": "/SubmitUrlBatch",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL the pages belong to",
+          "required": true
+        },
+        {
+          "name": "urlList",
+          "type": "array",
+          "location": "body",
+          "description": "List of URLs to submit",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "submit_content",
+      "description": "Submit page HTML content directly without waiting for a crawl. Required: siteUrl, url, httpMessage. Optional: structuredData.",
+      "method": "POST",
+      "path": "/SubmitContent",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL the page belongs to",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "body",
+          "description": "Page URL",
+          "required": true
+        },
+        {
+          "name": "httpMessage",
+          "type": "string",
+          "location": "body",
+          "description": "Base64-encoded HTTP response (headers + HTML body) for the page",
+          "required": true
+        },
+        {
+          "name": "structuredData",
+          "type": "string",
+          "location": "body",
+          "description": "Optional base64-encoded structured-data blob"
+        }
+      ]
+    },
+    {
+      "name": "submit_content-quota",
+      "description": "Get the content-submission quota and remaining allowance. Required: siteUrl. Returns the ContentSubmissionQuota.",
+      "method": "GET",
+      "path": "/GetContentSubmissionQuota",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "submit_quota",
+      "description": "Get the daily/monthly URL-submission quota and remaining allowance. Required: siteUrl. Returns the UrlSubmissionQuota.",
+      "method": "GET",
+      "path": "/GetUrlSubmissionQuota",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "submit_url",
+      "description": "Submit a single URL for indexing. Required: siteUrl, url.",
+      "method": "POST",
+      "path": "/SubmitUrl",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "body",
+          "description": "Site URL the page belongs to",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "body",
+          "description": "URL to submit for indexing",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "traffic_pages",
+      "description": "Get per-page search performance for a site. Required: siteUrl. Returns array of PageStat.",
+      "method": "GET",
+      "path": "/GetPageStats",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "traffic_queries",
+      "description": "Get per-query search performance (clicks, impressions, CTR, position) for a site. Required: siteUrl. Returns array of QueryStat.",
+      "method": "GET",
+      "path": "/GetQueryStats",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "traffic_query-page-detail",
+      "description": "Get detailed daily stats for a specific query-page combination. Required: siteUrl, query, page. Returns array of QueryPageDetailStat.",
+      "method": "GET",
+      "path": "/GetQueryPageDetailStats",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "location": "query",
+          "description": "Query",
+          "required": true
+        },
+        {
+          "name": "page",
+          "type": "string",
+          "location": "query",
+          "description": "Page URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "traffic_query-pages",
+      "description": "Get per-query, per-page search performance for a site. Required: siteUrl. Optional: query. Returns array of QueryPageStat.",
+      "method": "GET",
+      "path": "/GetQueryPageStats",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "location": "query",
+          "description": "Filter to a specific query"
+        }
+      ]
+    },
+    {
+      "name": "traffic_stats",
+      "description": "Get clicks and impressions by day for a site. Required: siteUrl. Returns array of RankTrafficStat.",
+      "method": "GET",
+      "path": "/GetRankAndTrafficStats",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "url_info",
+      "description": "Get index information for a specific URL. Required: siteUrl, url. Returns the UrlInfo.",
+      "method": "GET",
+      "path": "/GetUrlInfo",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "query",
+          "description": "URL to look up",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "url_traffic",
+      "description": "Get traffic information for a specific URL. Required: siteUrl, url. Returns the UrlTrafficInfo.",
+      "method": "GET",
+      "path": "/GetUrlTrafficInfo",
+      "params": [
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "location": "query",
+          "description": "Site URL",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "location": "query",
+          "description": "URL to look up",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
