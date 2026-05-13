@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-05-12T23:15:30.788778Z",
+  "cli_dir": "/Users/cameronbailey/printing-press/.runstate/cli-printing-press-f1560aab/runs/20260512-212106/working/nsw-transport-pp-cli",
+  "findings": null,
+  "scorecard_before": {
+    "mcp_description_quality": 10,
+    "captured": "2026-05-12T23:15:30.788778Z"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "sources": ["tfnsw-realtime", "tfnsw-trip-planner", "live-traffic-hazards", "live-traffic-cameras", "fuelcheck"],
+  "confirmed_at": "2026-05-12T11:21:06Z",
+  "raw_user_phrasing": "TfNSW Realtime; TfNSW Trip Planner; Live Traffic Hazards; Live Traffic Cameras; FuelCheck (listed in that order)"
+}

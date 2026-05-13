@@ -1,0 +1,320 @@
+{
+  "api_name": "nsw-transport",
+  "novelty_score": 0,
+  "alternatives": [
+    {
+      "name": "ha_transportnsw",
+      "url": "https://github.com/andystewart999/ha_transportnsw",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 6,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "transport-nsw-opendata",
+      "url": "https://github.com/rycus86/transport-nsw-opendata",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 5,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "nsw-fuel-api-client",
+      "url": "https://github.com/nickw444/nsw-fuel-api-client",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 4,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "TfNSW_GTFSRDB",
+      "url": "https://github.com/tarasutjarittham/TfNSW_GTFSRDB",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 3,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "PyTransportNSW",
+      "url": "https://github.com/Dav0815/TransportNSW",
+      "language": "Python",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 3,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "sydney-bus-departures",
+      "url": "https://github.com/jakecoppinger/sydney-bus-departures",
+      "language": "TypeScript",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 1,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "tfnsw-opal-fare-calculator",
+      "url": "https://github.com/jxeeno/tfnsw-opal-fare-calculator",
+      "language": "JavaScript",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 1,
+      "has_json_output": false,
+      "has_auth_support": false
+    },
+    {
+      "name": "ltfschoen/opendata-api",
+      "url": "https://github.com/ltfschoen/opendata-api",
+      "language": "Ruby",
+      "install_method": "",
+      "stars": 0,
+      "last_updated": "",
+      "command_count": 5,
+      "has_json_output": false,
+      "has_auth_support": false
+    }
+  ],
+  "gaps": [],
+  "patterns": [],
+  "recommendation": "proceed",
+  "researched_at": "2026-05-12T11:25:00Z",
+  "novel_features": [
+    {
+      "name": "Commute-blocked check",
+      "command": "commute",
+      "description": "Plan a journey A→B and immediately see open road hazards near the journey's endpoints plus active alerts on the lines it uses — one verdict on whether your route is clear.",
+      "rationale": "Joins Trip Planner trip legs against open road hazards (by proximity to the journey's endpoints) and Trip Planner service-status messages (by line) — no single API call or existing tool fuses transit, roads, and line alerts.",
+      "example": "nsw-transport-pp-cli commute \"Marrickville\" \"Central\" --depart 0815 --agent",
+      "why_it_matters": "When a user asks 'is my route clear right now', this is the one call that checks the journey, nearby road hazards, and the lines it uses together.",
+      "group": "Cross-source location intelligence"
+    },
+    {
+      "name": "Cheapest fuel near a place",
+      "command": "fuel-stop",
+      "description": "Find the cheapest station for a fuel type within N km of a named stop/POI or a planned trip's destination, ranked by price.",
+      "rationale": "Resolves a place name to coordinates via the local stops store, then ranks the local fuel_prices table by distance — works offline; the only fuel library has no 'cheapest near me' and no place-name input.",
+      "example": "nsw-transport-pp-cli fuel-stop E10 --near \"Central\" --radius 5 --sort price --agent",
+      "why_it_matters": "Answers 'where should I fill up near X' without the user knowing any coordinates.",
+      "group": "Cross-source location intelligence"
+    },
+    {
+      "name": "Where's my bus on a route",
+      "command": "whereis",
+      "description": "Show live GTFS-Realtime vehicle positions on a named route or line, ranked by distance from a chosen stop.",
+      "rationale": "Decodes the GTFS-RT vehicle-positions protobuf, filters to one route_id, and ranks vehicles by distance to a stop from the local stops table — the only existing GTFS-RT tool is a DB pipeline with no live query.",
+      "example": "nsw-transport-pp-cli whereis route 333 --near 203311 --agent",
+      "why_it_matters": "Direct answer to 'where is the 333 right now and how far from my stop' — the top user workflow.",
+      "group": "Realtime tracking"
+    },
+    {
+      "name": "Place snapshot",
+      "command": "station",
+      "description": "Everything about one stop in a single call: next departures, line alerts, the nearest traffic cameras, and the cheapest nearby fuel.",
+      "rationale": "Joins a live departure board with line alerts, the nearest traffic cameras, and the cheapest nearby fuel — the canonical 'tell me everything about this stop' query that no single API returns.",
+      "example": "nsw-transport-pp-cli station 2204135 --agent",
+      "why_it_matters": "When an agent is asked about a specific stop, this is the one call that returns the full picture.",
+      "group": "Cross-source location intelligence"
+    },
+    {
+      "name": "Cameras near a location",
+      "command": "cameras-near",
+      "description": "List traffic cameras within N km of a stop or a lat/lng, with their JPG hrefs and optional download.",
+      "rationale": "Local cameras table plus distance math — the live endpoint is one un-paged GeoJSON blob with no proximity query.",
+      "example": "nsw-transport-pp-cli cameras-near 203311 --radius 3 --agent",
+      "why_it_matters": "Lets a user eyeball the road near a place without scrolling hundreds of cameras.",
+      "group": "Roads \u0026 traffic"
+    },
+    {
+      "name": "Network disruptions, all modes",
+      "command": "disruptions",
+      "description": "Today's disruptions across every transport mode — GTFS-RT service alerts unioned with Trip Planner service-status messages, deduped and severity-sorted.",
+      "rationale": "Reads the local alerts table, which normalizes two different alert sources into one deduped, ranked list — neither source endpoint gives the union.",
+      "example": "nsw-transport-pp-cli disruptions --all --agent",
+      "why_it_matters": "One call answers 'what's broken on the network right now' instead of polling per-mode feeds.",
+      "group": "Realtime tracking"
+    },
+    {
+      "name": "Fuel price drift since last sync",
+      "command": "fuel-drift",
+      "description": "Show the price change per station for a fuel type since the last snapshot (recorded by `refresh` / `fuel prices`).",
+      "rationale": "Diffs the two most recent fuel-price snapshots in local SQLite — there is no API endpoint for 'what changed since I last looked'.",
+      "example": "nsw-transport-pp-cli fuel-drift E10 --brand \"7-Eleven\" --agent",
+      "why_it_matters": "Surfaces the actionable signal (prices moved at specific stations) that the raw FuelCheck price endpoints can't.",
+      "group": "Roads \u0026 traffic"
+    }
+  ],
+  "novel_features_built": [
+    {
+      "name": "Commute-blocked check",
+      "command": "commute",
+      "description": "Plan a journey A→B and immediately see open road hazards near the journey's endpoints plus active alerts on the lines it uses — one verdict on whether your route is clear.",
+      "rationale": "Joins Trip Planner trip legs against open road hazards (by proximity to the journey's endpoints) and Trip Planner service-status messages (by line) — no single API call or existing tool fuses transit, roads, and line alerts.",
+      "example": "nsw-transport-pp-cli commute \"Marrickville\" \"Central\" --depart 0815 --agent",
+      "why_it_matters": "When a user asks 'is my route clear right now', this is the one call that checks the journey, nearby road hazards, and the lines it uses together.",
+      "group": "Cross-source location intelligence"
+    },
+    {
+      "name": "Cheapest fuel near a place",
+      "command": "fuel-stop",
+      "description": "Find the cheapest station for a fuel type within N km of a named stop/POI or a planned trip's destination, ranked by price.",
+      "rationale": "Resolves a place name to coordinates via the local stops store, then ranks the local fuel_prices table by distance — works offline; the only fuel library has no 'cheapest near me' and no place-name input.",
+      "example": "nsw-transport-pp-cli fuel-stop E10 --near \"Central\" --radius 5 --sort price --agent",
+      "why_it_matters": "Answers 'where should I fill up near X' without the user knowing any coordinates.",
+      "group": "Cross-source location intelligence"
+    },
+    {
+      "name": "Where's my bus on a route",
+      "command": "whereis",
+      "description": "Show live GTFS-Realtime vehicle positions on a named route or line, ranked by distance from a chosen stop.",
+      "rationale": "Decodes the GTFS-RT vehicle-positions protobuf, filters to one route_id, and ranks vehicles by distance to a stop from the local stops table — the only existing GTFS-RT tool is a DB pipeline with no live query.",
+      "example": "nsw-transport-pp-cli whereis route 333 --near 203311 --agent",
+      "why_it_matters": "Direct answer to 'where is the 333 right now and how far from my stop' — the top user workflow.",
+      "group": "Realtime tracking"
+    },
+    {
+      "name": "Place snapshot",
+      "command": "station",
+      "description": "Everything about one stop in a single call: next departures, line alerts, the nearest traffic cameras, and the cheapest nearby fuel.",
+      "rationale": "Joins a live departure board with line alerts, the nearest traffic cameras, and the cheapest nearby fuel — the canonical 'tell me everything about this stop' query that no single API returns.",
+      "example": "nsw-transport-pp-cli station 2204135 --agent",
+      "why_it_matters": "When an agent is asked about a specific stop, this is the one call that returns the full picture.",
+      "group": "Cross-source location intelligence"
+    },
+    {
+      "name": "Cameras near a location",
+      "command": "cameras-near",
+      "description": "List traffic cameras within N km of a stop or a lat/lng, with their JPG hrefs and optional download.",
+      "rationale": "Local cameras table plus distance math — the live endpoint is one un-paged GeoJSON blob with no proximity query.",
+      "example": "nsw-transport-pp-cli cameras-near 203311 --radius 3 --agent",
+      "why_it_matters": "Lets a user eyeball the road near a place without scrolling hundreds of cameras.",
+      "group": "Roads \u0026 traffic"
+    },
+    {
+      "name": "Network disruptions, all modes",
+      "command": "disruptions",
+      "description": "Today's disruptions across every transport mode — GTFS-RT service alerts unioned with Trip Planner service-status messages, deduped and severity-sorted.",
+      "rationale": "Reads the local alerts table, which normalizes two different alert sources into one deduped, ranked list — neither source endpoint gives the union.",
+      "example": "nsw-transport-pp-cli disruptions --all --agent",
+      "why_it_matters": "One call answers 'what's broken on the network right now' instead of polling per-mode feeds.",
+      "group": "Realtime tracking"
+    },
+    {
+      "name": "Fuel price drift since last sync",
+      "command": "fuel-drift",
+      "description": "Show the price change per station for a fuel type since the last snapshot (recorded by `refresh` / `fuel prices`).",
+      "rationale": "Diffs the two most recent fuel-price snapshots in local SQLite — there is no API endpoint for 'what changed since I last looked'.",
+      "example": "nsw-transport-pp-cli fuel-drift E10 --brand \"7-Eleven\" --agent",
+      "why_it_matters": "Surfaces the actionable signal (prices moved at specific stations) that the raw FuelCheck price endpoints can't.",
+      "group": "Roads \u0026 traffic"
+    }
+  ],
+  "narrative": {
+    "display_name": "Transport for NSW Open Data",
+    "headline": "Every NSW transport, traffic, and fuel feed in one CLI, plus cross-source commands no single API offers.",
+    "value_prop": "Wraps five scattered NSW open-data APIs — GTFS-Realtime transit feeds, the Trip Planner, Live Traffic hazards, Live Traffic cameras, and FuelCheck — behind one binary with `--json`, typed exit codes, and a local SQLite store backing `search`/`sql` and the fuel-price history. On top of matching every Home Assistant integration and the Raycast extension, it adds commands those tools can't: `commute` (is my route blocked — checking the journey, nearby road hazards, and line alerts together), `fuel-stop` (cheapest fuel near a named place), `whereis` (live vehicle positions on a route, ranked by distance from your stop), and `station` (a stop's departures, alerts, nearby cameras, and cheapest nearby fuel in one call). First tool — and first agent surface — to treat Sydney location intelligence as one thing.",
+    "auth_narrative": "Most commands use a free Transport Open Data Hub API key in the `NSW_OPENDATA_API_KEY` env var (register an app at opendata.transport.nsw.gov.au and subscribe to the GTFS-Realtime, Trip Planner, and Live Traffic products). The `fuel ...` commands additionally need free FuelCheck credentials (`NSW_FUELCHECK_API_KEY` + `NSW_FUELCHECK_API_SECRET` from api.nsw.gov.au) — the CLI does the OAuth2 handshake and caches the token; without them the fuel commands fail with an actionable message and everything else still works.",
+    "quickstart": [
+      {
+        "command": "nsw-transport-pp-cli doctor",
+        "comment": "confirm NSW_OPENDATA_API_KEY is set and the Open Data Hub is reachable"
+      },
+      {
+        "command": "nsw-transport-pp-cli trip stops \"Central\"",
+        "comment": "find a stop ID to use — Central Station is 10101100"
+      },
+      {
+        "command": "nsw-transport-pp-cli trip departures 10101100",
+        "comment": "next departures from Central, with realtime estimates"
+      },
+      {
+        "command": "nsw-transport-pp-cli realtime vehicles sydneytrains --json",
+        "comment": "live positions of every Sydney Trains service right now"
+      },
+      {
+        "command": "nsw-transport-pp-cli sync",
+        "comment": "populate the local store so `search`/`sql` work offline (the cross-source commands fetch live)"
+      },
+      {
+        "command": "nsw-transport-pp-cli fuel-stop E10 --near \"Central\" --radius 5 --sort price",
+        "comment": "cheapest E10 within 5 km of Central"
+      }
+    ],
+    "troubleshoots": [
+      {
+        "symptom": "HTTP 503 \"Your API quota or rate limit has been exceeded\"",
+        "fix": "You are polling faster than the feeds refresh. Back off to one request per ~15 seconds; the realtime feeds only update every 10–15s anyway."
+      },
+      {
+        "symptom": "HTTP 500 \"Policy Falsified\" on a realtime or live-traffic call",
+        "fix": "The Authorization header is malformed or your app isn't subscribed to that API product. Check `NSW_OPENDATA_API_KEY` has no quotes/whitespace and subscribe to the product in the Open Data Hub portal."
+      },
+      {
+        "symptom": "`trip stops` returns error -2000 \"stop invalid\"",
+        "fix": "Use the default search (type any). The Aug-2025 Trip Planner upgrade broke name searches with type_sf=stop — this CLI already defaults to `any`."
+      },
+      {
+        "symptom": "`fuel ...` commands say credentials are missing",
+        "fix": "Set `NSW_FUELCHECK_API_KEY` and `NSW_FUELCHECK_API_SECRET` from your api.nsw.gov.au FuelCheck app. They're separate from the Open Data Hub key."
+      },
+      {
+        "symptom": "`fuel-drift` reports \"not enough fuel-price history\"",
+        "fix": "Run `nsw-transport-pp-cli refresh` (or `fuel prices`) at least twice — each records a price snapshot. The other cross-source commands fetch live and need no sync."
+      }
+    ],
+    "when_to_use": "Reach for this CLI for any Sydney/NSW location question that touches public transport, road traffic, traffic cameras, or fuel prices — next departures, journey planning, where a bus is, whether a route is blocked, what's disrupted on the network, or the cheapest fuel near somewhere. It's the right choice over a generic HTTP client because it decodes the GTFS-Realtime protobuf, does the FuelCheck OAuth handshake, normalizes GeoJSON, and decodes the GTFS-Realtime protobuf, does the FuelCheck OAuth handshake, normalizes GeoJSON, and joins the sources at query time — so a question like 'cheapest E10 near Town Hall' or 'is the train to the CBD OK right now' is one call, not five.",
+    "recipes": [
+      {
+        "title": "Is my morning commute clear?",
+        "command": "nsw-transport-pp-cli commute \"Marrickville\" \"Central\" --depart 0815 --agent --select verdict,journey_minutes,line_alerts.title,nearby_hazards.headline",
+        "explanation": "Plans the journey and reports open hazards on the roads it uses plus active alerts on the lines it uses; the dotted --select paths narrow the nested line_alerts and nearby_hazards arrays to just titles and headlines."
+      },
+      {
+        "title": "Where is the 333 bus?",
+        "command": "nsw-transport-pp-cli whereis route 333 --near 203311 --json",
+        "explanation": "Decodes the live bus vehicle-positions feed, filters to route 333, and ranks vehicles by distance from stop 203311."
+      },
+      {
+        "title": "Cheapest diesel near where I'm driving to",
+        "command": "nsw-transport-pp-cli fuel-stop DL --near \"Penrith Station\" --radius 8 --sort price",
+        "explanation": "Resolves the stop name to coordinates and ranks nearby stations by diesel price using the local store."
+      },
+      {
+        "title": "What's disrupted on the trains today (compact, agent-friendly)",
+        "command": "nsw-transport-pp-cli disruptions --mode sydneytrains --agent --select source,header,severity,affected_lines",
+        "explanation": "Unions the GTFS-RT alerts and Trip Planner service-status messages for trains, deduped, and narrows each record to just the source, headline, severity, and affected lines."
+      },
+      {
+        "title": "Save a traffic camera image near a stop",
+        "command": "nsw-transport-pp-cli cameras-near 203311 --radius 3 --save ./cam.jpg",
+        "explanation": "Finds the nearest camera to the stop and downloads its current JPEG (cameras refresh roughly every 15 seconds)."
+      }
+    ],
+    "trigger_phrases": [
+      "next train from Central",
+      "plan a trip from Marrickville to the city",
+      "where is the 333 bus",
+      "is my commute blocked",
+      "cheapest E10 near me",
+      "live traffic incidents in Sydney",
+      "use nsw-transport",
+      "run nsw-transport"
+    ]
+  }
+}

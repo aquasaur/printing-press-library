@@ -1,0 +1,393 @@
+{
+  "api_name": "nsw-transport",
+  "base_url": "https://api.transport.nsw.gov.au",
+  "description": "Unified CLI over five NSW open-data APIs — TfNSW GTFS-Realtime, Trip Planner, Live Traffic hazards \u0026 cameras, and FuelCheck — with a local store and cross-source commands.",
+  "mcp_ready": "full",
+  "http_transport": "standard",
+  "auth": {
+    "type": "api_key",
+    "header": "Authorization",
+    "format": "apikey {NSW_OPENDATA_API_KEY}",
+    "in": "header",
+    "env_vars": [
+      "NSW_OPENDATA_API_KEY"
+    ],
+    "env_var_specs": [
+      {
+        "name": "NSW_OPENDATA_API_KEY",
+        "kind": "per_call",
+        "required": true,
+        "sensitive": true,
+        "inferred": true
+      }
+    ],
+    "key_url": "https://opendata.transport.nsw.gov.au/data/user/register"
+  },
+  "required_headers": [],
+  "tools": [
+    {
+      "name": "cameras_list",
+      "description": "List all NSW traffic cameras (id, region, title, view, direction, image href). Returns the CameraCollection.",
+      "method": "GET",
+      "path": "/cameras",
+      "params": []
+    },
+    {
+      "name": "carpark_list",
+      "description": "All Park \u0026 Ride facilities with current availability. Returns the CarparkList.",
+      "method": "GET",
+      "path": "/full-list",
+      "params": []
+    },
+    {
+      "name": "carpark_show",
+      "description": "Availability for one Park \u0026 Ride facility. Required: facility. Returns the CarparkFacility.",
+      "method": "GET",
+      "path": "/",
+      "params": [
+        {
+          "name": "facility",
+          "type": "string",
+          "location": "path",
+          "description": "Facility ID (from `carpark list`)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "hazards_list",
+      "description": "List road hazards for a category and status. Required: category, status (default: all). Returns the HazardCollection.",
+      "method": "GET",
+      "path": "/{category}/{status}",
+      "params": [
+        {
+          "name": "category",
+          "type": "string",
+          "location": "path",
+          "description": "Hazard category",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "location": "path",
+          "description": "Hazard status (regional-lga-participation only supports 'all')",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "trip_alerts",
+      "description": "Service-status messages (planned and unplanned disruptions). Optional: status (default: current), date, mot-type (plus 1 more). Returns the ServiceStatus.",
+      "method": "GET",
+      "path": "/add_info",
+      "params": [
+        {
+          "name": "status",
+          "wire_name": "filterPublicationStatus",
+          "type": "string",
+          "location": "query",
+          "description": "Which messages to return"
+        },
+        {
+          "name": "date",
+          "wire_name": "filterDateValid",
+          "type": "string",
+          "location": "query",
+          "description": "Only messages valid on this date YYYYMMDD"
+        },
+        {
+          "name": "mot-type",
+          "wire_name": "filterMOTType",
+          "type": "int",
+          "location": "query",
+          "description": "Filter by mode-of-transport type code (1=train, 4=bus, 5=ferry, 9=light rail)"
+        },
+        {
+          "name": "outputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Response format (leave default)"
+        }
+      ]
+    },
+    {
+      "name": "trip_departures",
+      "description": "Real-time departure board for a stop. Required: stop. Optional: date, time, type_dm (default: stop) (plus 5 more). Returns the DepartureBoard.",
+      "method": "GET",
+      "path": "/departure_mon",
+      "params": [
+        {
+          "name": "stop",
+          "wire_name": "name_dm",
+          "type": "string",
+          "location": "path",
+          "description": "Stop ID (from `trip stops`), e.g. 10101100 for Central",
+          "required": true
+        },
+        {
+          "name": "date",
+          "wire_name": "itdDate",
+          "type": "string",
+          "location": "query",
+          "description": "Date YYYYMMDD (default: today)"
+        },
+        {
+          "name": "time",
+          "wire_name": "itdTime",
+          "type": "string",
+          "location": "query",
+          "description": "Time HHMM 24h (default: now)"
+        },
+        {
+          "name": "type_dm",
+          "type": "string",
+          "location": "query",
+          "description": "Departure-monitor target type (leave default)"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "location": "query",
+          "description": "Departure-monitor mode (leave default)"
+        },
+        {
+          "name": "departureMonitorMacro",
+          "type": "string",
+          "location": "query",
+          "description": "Enable departure-monitor macro (leave default)"
+        },
+        {
+          "name": "TfNSWDM",
+          "type": "string",
+          "location": "query",
+          "description": "Enable TfNSW departure extensions (leave default)"
+        },
+        {
+          "name": "outputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Response format (leave default)"
+        },
+        {
+          "name": "coordOutputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Coordinate CRS (leave default)"
+        }
+      ]
+    },
+    {
+      "name": "trip_nearby",
+      "description": "Find stops and POIs near a coordinate. Required: coord. Optional: radius (default: 1000), type_1 (default: GIS_POINT), inclFilter (default: 1) (plus 2 more). Returns the NearbyStops.",
+      "method": "GET",
+      "path": "/coord",
+      "params": [
+        {
+          "name": "coord",
+          "type": "string",
+          "location": "query",
+          "description": "Coordinate as 'lng:lat:EPSG:4326', e.g. 151.2060:-33.8834:EPSG:4326",
+          "required": true
+        },
+        {
+          "name": "radius",
+          "wire_name": "radius_1",
+          "type": "int",
+          "location": "query",
+          "description": "Search radius in metres"
+        },
+        {
+          "name": "type_1",
+          "type": "string",
+          "location": "query",
+          "description": "Result type filter (leave default)"
+        },
+        {
+          "name": "inclFilter",
+          "type": "string",
+          "location": "query",
+          "description": "Enable the type/radius filter (leave default)"
+        },
+        {
+          "name": "outputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Response format (leave default)"
+        },
+        {
+          "name": "coordOutputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Coordinate CRS (leave default)"
+        }
+      ]
+    },
+    {
+      "name": "trip_plan",
+      "description": "Plan a journey between two stops or coordinates, with leg-by-leg detail. Required: origin, destination. Optional: origin-type (default: any), destination-type (default: any), when-mode (default: dep) (plus 12 more). Returns the TripPlan.",
+      "method": "GET",
+      "path": "/trip",
+      "params": [
+        {
+          "name": "origin",
+          "wire_name": "name_origin",
+          "type": "string",
+          "location": "path",
+          "description": "Origin stop ID (from `trip stops`) or, with --origin-type coord, a 'lng:lat:EPSG:4326' string",
+          "required": true
+        },
+        {
+          "name": "destination",
+          "wire_name": "name_destination",
+          "type": "string",
+          "location": "path",
+          "description": "Destination stop ID or coord string",
+          "required": true
+        },
+        {
+          "name": "origin-type",
+          "wire_name": "type_origin",
+          "type": "string",
+          "location": "query",
+          "description": "How to interpret the origin value"
+        },
+        {
+          "name": "destination-type",
+          "wire_name": "type_destination",
+          "type": "string",
+          "location": "query",
+          "description": "How to interpret the destination value"
+        },
+        {
+          "name": "when-mode",
+          "wire_name": "depArrMacro",
+          "type": "string",
+          "location": "query",
+          "description": "Whether --date/--time is a departure time (dep) or arrival time (arr)"
+        },
+        {
+          "name": "date",
+          "wire_name": "itdDate",
+          "type": "string",
+          "location": "query",
+          "description": "Travel date YYYYMMDD (default: today)"
+        },
+        {
+          "name": "time",
+          "wire_name": "itdTime",
+          "type": "string",
+          "location": "query",
+          "description": "Travel time HHMM 24h (default: now)"
+        },
+        {
+          "name": "trips",
+          "wire_name": "calcNumberOfTrips",
+          "type": "int",
+          "location": "query",
+          "description": "Number of journey options to return (max 10)"
+        },
+        {
+          "name": "wheelchair",
+          "type": "string",
+          "location": "query",
+          "description": "Set to 'true' to return only wheelchair-accessible journeys"
+        },
+        {
+          "name": "exclude-means",
+          "wire_name": "excludedMeans",
+          "type": "string",
+          "location": "query",
+          "description": "Set to 'checkbox' to enable mode exclusion via the exclMOT_* params"
+        },
+        {
+          "name": "exclude-train",
+          "wire_name": "exclMOT_1",
+          "type": "string",
+          "location": "query",
+          "description": "Set to '1' to exclude trains (requires --exclude-means checkbox)"
+        },
+        {
+          "name": "exclude-bus",
+          "wire_name": "exclMOT_4",
+          "type": "string",
+          "location": "query",
+          "description": "Set to '1' to exclude buses (requires --exclude-means checkbox)"
+        },
+        {
+          "name": "exclude-ferry",
+          "wire_name": "exclMOT_5",
+          "type": "string",
+          "location": "query",
+          "description": "Set to '1' to exclude ferries (requires --exclude-means checkbox)"
+        },
+        {
+          "name": "exclude-lightrail",
+          "wire_name": "exclMOT_9",
+          "type": "string",
+          "location": "query",
+          "description": "Set to '1' to exclude light rail (requires --exclude-means checkbox)"
+        },
+        {
+          "name": "outputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Response format (leave default)"
+        },
+        {
+          "name": "coordOutputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Coordinate CRS (leave default)"
+        },
+        {
+          "name": "TfNSWTR",
+          "type": "string",
+          "location": "query",
+          "description": "Enable TfNSW trip extensions (leave default)"
+        }
+      ]
+    },
+    {
+      "name": "trip_stops",
+      "description": "Find stops, stations, wharves, light-rail stops and POIs by name. Required: query. Optional: type (default: any), outputFormat (default: rapidJSON), coordOutputFormat (default: EPSG:4326) (plus 1 more). Returns the StopFinderResult.",
+      "method": "GET",
+      "path": "/stop_finder",
+      "params": [
+        {
+          "name": "query",
+          "wire_name": "name_sf",
+          "type": "string",
+          "location": "path",
+          "description": "Stop/place name to search for (e.g. 'Central')",
+          "required": true
+        },
+        {
+          "name": "type",
+          "wire_name": "type_sf",
+          "type": "string",
+          "location": "query",
+          "description": "Result type filter; keep the default 'any' (the Aug-2025 engine upgrade broke type_sf=stop)"
+        },
+        {
+          "name": "outputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Response format (leave default)"
+        },
+        {
+          "name": "coordOutputFormat",
+          "type": "string",
+          "location": "query",
+          "description": "Coordinate CRS in responses (leave default)"
+        },
+        {
+          "name": "TfNSWSF",
+          "type": "string",
+          "location": "query",
+          "description": "Enable TfNSW stop-finder extensions (leave default)"
+        }
+      ]
+    }
+  ]
+}

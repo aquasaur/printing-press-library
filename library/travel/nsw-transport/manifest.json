@@ -1,0 +1,39 @@
+{
+  "manifest_version": "0.3",
+  "name": "nsw-transport-pp-mcp",
+  "display_name": "Nsw Transport",
+  "version": "4.5.0",
+  "description": "Nsw Transport API surface as MCP tools.",
+  "author": {
+    "name": "CLI Printing Press"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/nsw-transport-pp-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/bin/nsw-transport-pp-mcp",
+      "args": [],
+      "env": {
+        "NSW_OPENDATA_API_KEY": "${user_config.nsw_opendata_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "nsw_opendata_api_key": {
+      "type": "string",
+      "title": "NSW_OPENDATA_API_KEY",
+      "description": "Sets NSW_OPENDATA_API_KEY for the Nsw Transport MCP server. Get a credential from https://opendata.transport.nsw.gov.au/data/user/register.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ]
+  }
+}

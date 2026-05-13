@@ -1,0 +1,355 @@
+name: nsw-transport
+description: "Unified CLI over five NSW open-data APIs — TfNSW GTFS-Realtime, Trip Planner, Live Traffic hazards & cameras, and FuelCheck — with a local store and cross-source commands."
+version: "1.0.0"
+base_url: "https://api.transport.nsw.gov.au"
+
+auth:
+  type: api_key
+  in: header
+  header: "Authorization"
+  format: "apikey {token}"
+  env_vars:
+    - NSW_OPENDATA_API_KEY
+  key_url: "https://opendata.transport.nsw.gov.au/data/user/register"
+  instructions: "Register an application on the Open Data Hub, then subscribe to the GTFS-Realtime, Trip Planner, and Live Traffic API products"
+  verify_path: "/v1/carpark/full-list"
+
+config:
+  format: toml
+  path: "~/.config/nsw-transport-pp-cli/config.toml"
+
+extra_commands:
+  - name: "realtime vehicles"
+    description: "Live GTFS-Realtime vehicle positions for a transport mode (decodes the protobuf feed)"
+  - name: "realtime trips"
+    description: "Live GTFS-Realtime trip updates (delays/cancellations) for a transport mode"
+  - name: "realtime alerts"
+    description: "Live GTFS-Realtime service alerts for a transport mode"
+  - name: "realtime schedule"
+    description: "Download the GTFS static timetable ZIP for a transport mode"
+  - name: "fuel prices"
+    description: "All current NSW fuel prices (FuelCheck), filterable by fuel type and brand"
+  - name: "fuel near"
+    description: "Fuel prices near a lat/lng within a radius, sorted by price or distance"
+  - name: "fuel station"
+    description: "Current fuel prices for one station by station code"
+  - name: "fuel by-location"
+    description: "Fuel prices for a named location (suburb or postcode)"
+  - name: "fuel types"
+    description: "List valid FuelCheck fuel-type codes"
+  - name: "fuel brands"
+    description: "List FuelCheck fuel brands"
+  - name: "fuel trends"
+    description: "Statewide or per-station fuel price trends over a period"
+  - name: "commute"
+    description: "Plan a journey A→B and report road hazards on the roads it uses plus active alerts on the lines it uses"
+  - name: "fuel-stop"
+    description: "Cheapest fuel of a given type within N km of a named stop/POI or a trip destination"
+  - name: "whereis"
+    description: "Live vehicle positions on a named route, ranked by distance from a chosen stop"
+  - name: "station"
+    description: "Everything about one stop: next departures, line alerts, nearest cameras, cheapest fuel nearby, nearest Park & Ride"
+  - name: "cameras-near"
+    description: "Traffic cameras within N km of a stop or lat/lng, with JPG hrefs and optional download"
+  - name: "disruptions"
+    description: "Today's disruptions across every transport mode, deduped from GTFS-RT alerts and Trip Planner service-status messages"
+  - name: "fuel-drift"
+    description: "Fuel price change per fuel type or brand since the last sync"
+
+resources:
+  trip:
+    description: "TfNSW Trip Planner — stop search, journey planning, departure boards, nearby stops, service status"
+    base_url: "https://api.transport.nsw.gov.au/v1/tp"
+    endpoints:
+      stops:
+        method: GET
+        path: "/stop_finder"
+        description: "Find stops, stations, wharves, light-rail stops and POIs by name"
+        params:
+          - name: name_sf
+            flag_name: query
+            type: string
+            required: true
+            positional: true
+            description: "Stop/place name to search for (e.g. \"Central\")"
+          - name: type_sf
+            flag_name: type
+            type: string
+            default: "any"
+            enum: [any, stop, platform, poi, address, coord]
+            description: "Result type filter; keep the default \"any\" (the Aug-2025 engine upgrade broke type_sf=stop)"
+          - name: outputFormat
+            type: string
+            default: "rapidJSON"
+            description: "Response format (leave default)"
+          - name: coordOutputFormat
+            type: string
+            default: "EPSG:4326"
+            description: "Coordinate CRS in responses (leave default)"
+          - name: TfNSWSF
+            type: string
+            default: "true"
+            description: "Enable TfNSW stop-finder extensions (leave default)"
+        response:
+          type: object
+          item: StopFinderResult
+
+      plan:
+        method: GET
+        path: "/trip"
+        description: "Plan a journey between two stops or coordinates, with leg-by-leg detail"
+        params:
+          - name: name_origin
+            flag_name: origin
+            type: string
+            required: true
+            positional: true
+            description: "Origin stop ID (from `trip stops`) or, with --origin-type coord, a \"lng:lat:EPSG:4326\" string"
+          - name: name_destination
+            flag_name: destination
+            type: string
+            required: true
+            positional: true
+            description: "Destination stop ID or coord string"
+          - name: type_origin
+            flag_name: origin-type
+            type: string
+            default: "any"
+            enum: [any, stop, coord]
+            description: "How to interpret the origin value"
+          - name: type_destination
+            flag_name: destination-type
+            type: string
+            default: "any"
+            enum: [any, stop, coord]
+            description: "How to interpret the destination value"
+          - name: depArrMacro
+            flag_name: when-mode
+            type: string
+            default: "dep"
+            enum: [dep, arr]
+            description: "Whether --date/--time is a departure time (dep) or arrival time (arr)"
+          - name: itdDate
+            flag_name: date
+            type: string
+            description: "Travel date YYYYMMDD (default: today)"
+          - name: itdTime
+            flag_name: time
+            type: string
+            description: "Travel time HHMM 24h (default: now)"
+          - name: calcNumberOfTrips
+            flag_name: trips
+            type: int
+            default: 5
+            description: "Number of journey options to return (max 10)"
+          - name: wheelchair
+            type: string
+            description: "Set to \"true\" to return only wheelchair-accessible journeys"
+          - name: excludedMeans
+            flag_name: exclude-means
+            type: string
+            description: "Set to \"checkbox\" to enable mode exclusion via the exclMOT_* params"
+          - name: exclMOT_1
+            flag_name: exclude-train
+            type: string
+            description: "Set to \"1\" to exclude trains (requires --exclude-means checkbox)"
+          - name: exclMOT_4
+            flag_name: exclude-bus
+            type: string
+            description: "Set to \"1\" to exclude buses (requires --exclude-means checkbox)"
+          - name: exclMOT_5
+            flag_name: exclude-ferry
+            type: string
+            description: "Set to \"1\" to exclude ferries (requires --exclude-means checkbox)"
+          - name: exclMOT_9
+            flag_name: exclude-lightrail
+            type: string
+            description: "Set to \"1\" to exclude light rail (requires --exclude-means checkbox)"
+          - name: outputFormat
+            type: string
+            default: "rapidJSON"
+            description: "Response format (leave default)"
+          - name: coordOutputFormat
+            type: string
+            default: "EPSG:4326"
+            description: "Coordinate CRS (leave default)"
+          - name: TfNSWTR
+            type: string
+            default: "true"
+            description: "Enable TfNSW trip extensions (leave default)"
+        response:
+          type: object
+          item: TripPlan
+
+      departures:
+        method: GET
+        path: "/departure_mon"
+        description: "Real-time departure board for a stop"
+        params:
+          - name: name_dm
+            flag_name: stop
+            type: string
+            required: true
+            positional: true
+            description: "Stop ID (from `trip stops`), e.g. 10101100 for Central"
+          - name: itdDate
+            flag_name: date
+            type: string
+            description: "Date YYYYMMDD (default: today)"
+          - name: itdTime
+            flag_name: time
+            type: string
+            description: "Time HHMM 24h (default: now)"
+          - name: type_dm
+            type: string
+            default: "stop"
+            description: "Departure-monitor target type (leave default)"
+          - name: mode
+            type: string
+            default: "direct"
+            description: "Departure-monitor mode (leave default)"
+          - name: departureMonitorMacro
+            type: string
+            default: "true"
+            description: "Enable departure-monitor macro (leave default)"
+          - name: TfNSWDM
+            type: string
+            default: "true"
+            description: "Enable TfNSW departure extensions (leave default)"
+          - name: outputFormat
+            type: string
+            default: "rapidJSON"
+            description: "Response format (leave default)"
+          - name: coordOutputFormat
+            type: string
+            default: "EPSG:4326"
+            description: "Coordinate CRS (leave default)"
+        response:
+          type: object
+          item: DepartureBoard
+
+      nearby:
+        method: GET
+        path: "/coord"
+        description: "Find stops and POIs near a coordinate"
+        params:
+          - name: coord
+            type: string
+            required: true
+            description: "Coordinate as \"lng:lat:EPSG:4326\", e.g. 151.2060:-33.8834:EPSG:4326"
+          - name: radius_1
+            flag_name: radius
+            type: int
+            default: 1000
+            description: "Search radius in metres"
+          - name: type_1
+            type: string
+            default: "GIS_POINT"
+            description: "Result type filter (leave default)"
+          - name: inclFilter
+            type: string
+            default: "1"
+            description: "Enable the type/radius filter (leave default)"
+          - name: outputFormat
+            type: string
+            default: "rapidJSON"
+            description: "Response format (leave default)"
+          - name: coordOutputFormat
+            type: string
+            default: "EPSG:4326"
+            description: "Coordinate CRS (leave default)"
+        response:
+          type: object
+          item: NearbyStops
+
+      alerts:
+        method: GET
+        path: "/add_info"
+        description: "Service-status messages (planned and unplanned disruptions)"
+        params:
+          - name: filterPublicationStatus
+            flag_name: status
+            type: string
+            default: "current"
+            enum: [current, historic, all]
+            description: "Which messages to return"
+          - name: filterDateValid
+            flag_name: date
+            type: string
+            description: "Only messages valid on this date YYYYMMDD"
+          - name: filterMOTType
+            flag_name: mot-type
+            type: int
+            description: "Filter by mode-of-transport type code (1=train, 4=bus, 5=ferry, 9=light rail)"
+          - name: outputFormat
+            type: string
+            default: "rapidJSON"
+            description: "Response format (leave default)"
+        response:
+          type: object
+          item: ServiceStatus
+
+  hazards:
+    description: "Live Traffic NSW road hazards — incidents, roadworks, floods, fires, alpine conditions, major events"
+    base_url: "https://api.transport.nsw.gov.au/v1/live/hazards"
+    endpoints:
+      list:
+        method: GET
+        path: "/{category}/{status}"
+        description: "List road hazards for a category and status"
+        params:
+          - name: category
+            type: string
+            required: true
+            positional: true
+            path_param: true
+            enum: [incident, fire, flood, alpine, roadwork, majorevent, regional-lga-incident, regional-lga-participation]
+            description: "Hazard category"
+          - name: status
+            type: string
+            positional: true
+            path_param: true
+            default: "all"
+            enum: [all, open, closed]
+            description: "Hazard status (regional-lga-participation only supports \"all\")"
+        response:
+          type: object
+          item: HazardCollection
+
+  cameras:
+    description: "Live Traffic NSW road cameras"
+    base_url: "https://api.transport.nsw.gov.au/v1/live"
+    endpoints:
+      list:
+        method: GET
+        path: "/cameras"
+        description: "List all NSW traffic cameras (id, region, title, view, direction, image href)"
+        response:
+          type: object
+          item: CameraCollection
+
+  carpark:
+    description: "Park & Ride car-park availability"
+    base_url: "https://api.transport.nsw.gov.au/v1/carpark"
+    endpoints:
+      list:
+        method: GET
+        path: "/full-list"
+        description: "All Park & Ride facilities with current availability"
+        response:
+          type: object
+          item: CarparkList
+
+      show:
+        method: GET
+        path: "/"
+        description: "Availability for one Park & Ride facility"
+        params:
+          - name: facility
+            type: string
+            required: true
+            positional: true
+            description: "Facility ID (from `carpark list`)"
+        response:
+          type: object
+          item: CarparkFacility

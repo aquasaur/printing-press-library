@@ -1,0 +1,10 @@
+{
+  "run_id": "20260512-212106",
+  "sources": [
+    {"source_name": "tfnsw-realtime", "decision": "skip-silent", "reason": "docs-complete: GTFS-Realtime is a published standard + TfNSW Implementation Spec PDF v2.0; protobuf REST feed, not a website with hidden XHR — browser-sniff would add nothing", "asked_at": "2026-05-12T11:30:34Z"},
+    {"source_name": "tfnsw-trip-planner", "decision": "skip-silent", "reason": "spec-complete: Trip Planner Swagger + Technical Documentation PDF v3.3 fully cover all /v1/tp/* endpoints and params", "asked_at": "2026-05-12T11:30:34Z"},
+    {"source_name": "live-traffic-hazards", "decision": "skip-silent", "reason": "spec-complete: Live Traffic NSW Developer Guide v1.9 + Swagger gist cover all hazard categories/types and GeoJSON properties", "asked_at": "2026-05-12T11:30:34Z"},
+    {"source_name": "live-traffic-cameras", "decision": "skip-silent", "reason": "spec-complete: single GeoJSON endpoint documented in Live Traffic NSW Developer Guide; images are plain JPGs", "asked_at": "2026-05-12T11:30:34Z"},
+    {"source_name": "fuelcheck", "decision": "skip-silent", "reason": "spec-complete: FuelCheck API Technical Specs PDF v1.0 + nsw-fuel-api-client/Home Assistant implementations cross-validate the OAuth flow and all endpoints", "asked_at": "2026-05-12T11:30:34Z"}
+  ]
+}

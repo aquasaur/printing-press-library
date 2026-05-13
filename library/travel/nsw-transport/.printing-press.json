@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-12T23:18:22.294939Z",
+  "printing_press_version": "4.5.0",
+  "api_name": "nsw-transport",
+  "display_name": "Nsw Transport",
+  "cli_name": "nsw-transport-pp-cli",
+  "owner": "aquasaur",
+  "printer": "aquasaur",
+  "printer_name": "Cameron Bailey",
+  "spec_path": "/Users/cameronbailey/printing-press/.runstate/cli-printing-press-f1560aab/runs/20260512-212106/research/nsw-transport-spec.yaml",
+  "spec_format": "internal",
+  "spec_checksum": "sha256:a4f3efb069aa7f95e81956d9efde32901c045467d6f6d2bba490e24f9d3573ad",
+  "run_id": "20260512-212106",
+  "mcp_binary": "nsw-transport-pp-mcp",
+  "mcp_tool_count": 9,
+  "mcp_ready": "full",
+  "api_version": "1.0.0",
+  "auth_type": "api_key",
+  "auth_env_vars": [
+    "NSW_OPENDATA_API_KEY"
+  ],
+  "auth_key_url": "https://opendata.transport.nsw.gov.au/data/user/register",
+  "novel_features": [
+    {
+      "name": "Commute-blocked check",
+      "command": "commute",
+      "description": "Plan a journey A\u2192B and immediately see open road hazards near the journey's endpoints plus active alerts on the lines it uses \u2014 one verdict on whether your route is clear."
+    },
+    {
+      "name": "Cheapest fuel near a place",
+      "command": "fuel-stop",
+      "description": "Find the cheapest station for a fuel type within N km of a named stop/POI or a planned trip's destination, ranked by price."
+    },
+    {
+      "name": "Where's my bus on a route",
+      "command": "whereis",
+      "description": "Show live GTFS-Realtime vehicle positions on a named route or line, ranked by distance from a chosen stop."
+    },
+    {
+      "name": "Place snapshot",
+      "command": "station",
+      "description": "Everything about one stop in a single call: next departures, line alerts, the nearest traffic cameras, and the cheapest nearby fuel."
+    },
+    {
+      "name": "Cameras near a location",
+      "command": "cameras-near",
+      "description": "List traffic cameras within N km of a stop or a lat/lng, with their JPG hrefs and optional download."
+    },
+    {
+      "name": "Network disruptions, all modes",
+      "command": "disruptions",
+      "description": "Today's disruptions across every transport mode \u2014 GTFS-RT service alerts unioned with Trip Planner service-status messages, deduped and severity-sorted."
+    },
+    {
+      "name": "Fuel price drift since last sync",
+      "command": "fuel-drift",
+      "description": "Show the price change per station for a fuel type since the last snapshot (recorded by `refresh` / `fuel prices`)."
+    }
+  ],
+  "category": "travel"
+}
