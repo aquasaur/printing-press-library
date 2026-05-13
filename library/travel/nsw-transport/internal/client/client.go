@@ -9,11 +9,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/mvanhorn/printing-press-library/library/travel/nsw-transport/internal/cliutil"
+	"github.com/mvanhorn/printing-press-library/library/travel/nsw-transport/internal/config"
 	"io"
 	"math"
 	"net/http"
-	"github.com/mvanhorn/printing-press-library/library/travel/nsw-transport/internal/cliutil"
-	"github.com/mvanhorn/printing-press-library/library/travel/nsw-transport/internal/config"
 	"os"
 	"path/filepath"
 	"sort"
@@ -127,9 +127,11 @@ func (c *Client) readCache(path string, params map[string]string) (json.RawMessa
 }
 
 func (c *Client) writeCache(path string, params map[string]string, data json.RawMessage) {
-	os.MkdirAll(c.cacheDir, 0o755)
+	// Owner-only: cached API responses may contain authenticated data, and on a
+	// shared host 0o644/0o755 would let any local user read them.
+	os.MkdirAll(c.cacheDir, 0o700)
 	cacheFile := filepath.Join(c.cacheDir, c.cacheKey(path, params)+".json")
-	os.WriteFile(cacheFile, []byte(data), 0o644)
+	os.WriteFile(cacheFile, []byte(data), 0o600)
 }
 
 // invalidateCache wholesale-removes the cache directory so the next read

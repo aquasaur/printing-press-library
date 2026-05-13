@@ -99,9 +99,6 @@ func (c *Config) AuthHeader() string {
 	if token == "" {
 		return ""
 	}
-	if c.NswOpendataApiKey == "" {
-		return ""
-	}
 	replacements := map[string]string{
 		"token":                token,
 		"opendata_api_key":     c.NswOpendataApiKey,
@@ -147,10 +144,18 @@ func (c *Config) SaveCredential(token string) error {
 	return c.save()
 }
 
+// ClearTokens wipes every stored credential — the OAuth bearer slots, the
+// raw auth header, the api_key (NswOpendataApiKey, which AuthHeader actually
+// reads for this API), and the FuelCheck key/secret. `auth logout` calls this,
+// so it must leave the config file with no usable credential.
 func (c *Config) ClearTokens() error {
 	c.AccessToken = ""
 	c.RefreshToken = ""
 	c.TokenExpiry = time.Time{}
+	c.AuthHeaderVal = ""
+	c.NswOpendataApiKey = ""
+	c.FuelcheckApiKey = ""
+	c.FuelcheckApiSecret = ""
 	return c.save()
 }
 
